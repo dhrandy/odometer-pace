@@ -15,7 +15,7 @@
     document.documentElement.setAttribute('data-accent', ui.accent);
     document.documentElement.setAttribute('data-oled', String(ui.oled));
     var meta = document.querySelector('meta[name=theme-color]');
-    if (meta) meta.setAttribute('content', ui.oled ? '#000000' : getComputedStyle(document.documentElement).getPropertyValue('--hero-b').trim());
+    if (meta) meta.setAttribute('content', ui.oled ? '#000000' : '#222226');
     try { localStorage.setItem('op_ui', JSON.stringify(ui)); } catch (e) { /* private mode */ }
   }
 

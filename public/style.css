@@ -9,9 +9,9 @@
 }
 
 :root {
-  --accent: #8b5cf6; --accent-strong: #7c3aed; --accent-strong-hover: #6d28d9; --accent-soft: #2a2145; --accent-mid: #a78bfa; --accent-rgb: 167,139,250; --hero-a: #2e1065; --hero-b: #4c1d95; --accent-past: #191428;
-  --ink: #f1ecfa; --muted: #a79fb8; --line: #3a3150; --bg: #141021; --card: #1d1830; --raised: #272040;
-  --over: #fbbf24; --over-soft: #3d2f10; --urgent: #fb923c; --urgent-soft: #4a2410; --under: #56b4e9; --under-soft: #0f2c42; --good: #c4b5fd; --err: #fcd34d;
+  --accent: #8b5cf6; --accent-strong: #7c3aed; --accent-strong-hover: #6d28d9; --accent-mid: #a78bfa; --accent-rgb: 167,139,250; --accent-soft: #2c2c31; --accent-past: #18181b;
+  --ink: #f2f2f3; --muted: #a4a4ad; --line: #3a3a41; --bg: #131315; --card: #1d1d20; --raised: #27272b; --hero-top: #222226;
+  --over: #fbbf24; --over-soft: #3d2f10; --urgent: #fb923c; --urgent-soft: #4a2410; --under: #56b4e9; --under-soft: #0f2c42; --good: var(--accent-mid); --err: #fcd34d;
 }
 html { color-scheme: dark; }
 * { box-sizing: border-box; }
@@ -25,7 +25,7 @@ button, input, select { font: inherit; }
 .hidden { display: none !important; }
 
 .hero {
-  background: linear-gradient(135deg, var(--hero-a) 0%, var(--hero-b) 100%);
+  background: linear-gradient(135deg, var(--hero-top) 0%, color-mix(in srgb, var(--accent-strong) 40%, var(--hero-top)) 100%);
   color: #fff; padding: calc(24px + env(safe-area-inset-top)) 18px 72px;
 }
 .hero-inner, .wrap { max-width: 1080px; margin: 0 auto; }
@@ -120,12 +120,12 @@ button, input, select { font: inherit; }
 .day {
   position: relative; aspect-ratio: 1 / 1.05; border-radius: 6px; padding: 2px 3px;
   display: flex; flex-direction: column; justify-content: space-between; font-size: .72rem; line-height: 1.1;
-  background: var(--accent-soft); color: #e9e2fb;
+  background: var(--accent-soft); color: #ececee;
 }
 .day .n { font-weight: 700; }
 .day .m { font-size: .56rem; opacity: .8; text-align: right; white-space: nowrap; }
 .day.blank { background: none; }
-.day.past { background: var(--accent-past); color: #9a91ad; }
+.day.past { background: var(--accent-past); color: #9a9aa3; }
 .day.past::after {
   content: ""; position: absolute; inset: 3px;
   background: linear-gradient(to top right, transparent calc(50% - 1px), rgba(var(--accent-rgb),.32) 50%, transparent calc(50% + 1px)),
@@ -162,18 +162,18 @@ pre, code { font-size: .85rem; }
 pre { background: var(--raised); padding: 12px; border-radius: 10px; overflow-x: auto; }
 code { background: var(--raised); padding: 1px 5px; border-radius: 4px; }
 pre code { padding: 0; background: none; }
-.hero { background: linear-gradient(135deg, var(--hero-a) 0%, var(--hero-b) 100%); }
+.hero { background: linear-gradient(135deg, var(--hero-top) 0%, color-mix(in srgb, var(--accent-strong) 40%, var(--hero-top)) 100%); }
 
 /* Accent colors. Purple is the default set in :root. Over pace stays amber and under pace stays sky blue on every accent. */
-html[data-accent="blue"] { --accent: #60a5fa; --accent-strong: #2563eb; --accent-strong-hover: #1d4ed8; --accent-soft: #1b2745; --accent-mid: #93c5fd; --accent-rgb: 147,197,253; --hero-a: #172554; --hero-b: #1e3a8a; --accent-past: #121a2e; }
-html[data-accent="cyan"] { --accent: #22d3ee; --accent-strong: #0e7490; --accent-strong-hover: #155e75; --accent-soft: #14303a; --accent-mid: #67e8f9; --accent-rgb: 103,232,249; --hero-a: #083344; --hero-b: #155e75; --accent-past: #0f1d24; }
-html[data-accent="green"] { --accent: #4ade80; --accent-strong: #15803d; --accent-strong-hover: #166534; --accent-soft: #15301f; --accent-mid: #86efac; --accent-rgb: 134,239,172; --hero-a: #052e16; --hero-b: #14532d; --accent-past: #101e16; }
-html[data-accent="pink"] { --accent: #f472b6; --accent-strong: #be185d; --accent-strong-hover: #9d174d; --accent-soft: #3a1b30; --accent-mid: #f9a8d4; --accent-rgb: 249,168,212; --hero-a: #500724; --hero-b: #831843; --accent-past: #261320; }
-html[data-accent="orange"] { --accent: #fb923c; --accent-strong: #c2410c; --accent-strong-hover: #9a3412; --accent-soft: #3a2616; --accent-mid: #fdba74; --accent-rgb: 253,186,116; --hero-a: #431407; --hero-b: #7c2d12; --accent-past: #251a12; }
+html[data-accent="blue"] { --accent: #60a5fa; --accent-strong: #2563eb; --accent-strong-hover: #1d4ed8; --accent-mid: #93c5fd; --accent-rgb: 147,197,253; }
+html[data-accent="cyan"] { --accent: #22d3ee; --accent-strong: #0e7490; --accent-strong-hover: #155e75; --accent-mid: #67e8f9; --accent-rgb: 103,232,249; }
+html[data-accent="green"] { --accent: #4ade80; --accent-strong: #15803d; --accent-strong-hover: #166534; --accent-mid: #86efac; --accent-rgb: 134,239,172; }
+html[data-accent="pink"] { --accent: #f472b6; --accent-strong: #be185d; --accent-strong-hover: #9d174d; --accent-mid: #f9a8d4; --accent-rgb: 249,168,212; }
+html[data-accent="orange"] { --accent: #fb923c; --accent-strong: #c2410c; --accent-strong-hover: #9a3412; --accent-mid: #fdba74; --accent-rgb: 253,186,116; }
 
 /* True black for OLED screens. */
-html[data-oled="true"] { --bg: #000; --card: #0b0b0d; --raised: #17171b; --line: #2a2a30; --hero-a: #000; }
-html[data-oled="true"] .hero { background: linear-gradient(135deg, #000 0%, var(--hero-b) 160%); }
+html[data-oled="true"] { --bg: #000; --card: #0b0b0d; --raised: #17171b; --line: #2a2a30; --hero-top: #000; }
+html[data-oled="true"] .hero { background: linear-gradient(135deg, #000 0%, color-mix(in srgb, var(--accent-strong) 28%, #000) 100%); }
 html[data-oled="true"][data-accent] .day.past { background: #08080a; }
 html[data-oled="true"] .day { background: var(--raised); }
 html[data-oled="true"] .day.today { background: var(--accent-strong); }

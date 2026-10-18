@@ -303,3 +303,13 @@ test('the web form asks before replacing a same-date reading', async () => {
   const js = await (await fetch(BASE + '/app.js')).text();
   assert.ok(js.includes("' already has '") && js.includes("text: 'Replace'") && js.includes("text: 'Cancel'"));
 });
+
+test('the default dark theme is neutral gray, not tinted by the accent', async () => {
+  const css = await (await fetch(BASE + '/style.css')).text();
+  const root = css.match(/:root \{([^}]*)\}/)[1];
+  for (const v of ['--bg', '--card', '--raised']) {
+    const hex = root.match(new RegExp(v + ': #([0-9a-f]{6})'))[1];
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    assert.ok(Math.max(r, g, b) - Math.min(r, g, b) <= 6, v + ' should be a neutral gray');
+  }
+});

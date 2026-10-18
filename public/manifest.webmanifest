@@ -3,7 +3,7 @@
   "short_name": "Odometer Pace",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f5f3f7",
-  "theme_color": "#4c1d95",
+  "background_color": "#131315",
+  "theme_color": "#222226",
   "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
 }
