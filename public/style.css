@@ -1,7 +1,7 @@
 :root {
   --accent: #8b5cf6; --accent-strong: #7c3aed; --accent-strong-hover: #6d28d9; --accent-soft: #2a2145; --accent-mid: #a78bfa; --accent-rgb: 167,139,250; --hero-a: #2e1065; --hero-b: #4c1d95; --accent-past: #191428;
   --ink: #f1ecfa; --muted: #a79fb8; --line: #3a3150; --bg: #141021; --card: #1d1830; --raised: #272040;
-  --over: #fbbf24; --over-soft: #3d2f10; --good: #c4b5fd; --err: #fda4af;
+  --over: #fbbf24; --over-soft: #3d2f10; --good: #c4b5fd; --err: #fcd34d;
 }
 html { color-scheme: dark; }
 * { box-sizing: border-box; }
@@ -61,7 +61,7 @@ button, input, select { font: inherit; }
 .btn:hover { background: var(--accent-strong-hover); }
 .btn.quiet { background: var(--raised); color: var(--ink); }
 .btn.quiet:hover { background: var(--line); }
-.btn.danger { background: #3b1d2a; color: var(--err); }
+.btn.danger { background: var(--raised); color: var(--err); }
 .err { color: var(--err); min-height: 1.3em; margin: 8px 0 0; font-size: .92rem; }
 .ok { color: var(--good); }
 
@@ -85,7 +85,7 @@ button, input, select { font: inherit; }
 .log { list-style: none; margin: 14px 0 0; padding: 0; }
 .log li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
 .log .src { color: var(--muted); font-size: .8rem; margin-left: 6px; }
-.log button { background: none; border: 0; color: var(--err); cursor: pointer; padding: 8px; font-size: .9rem; }
+.log button { background: none; border: 0; color: var(--muted); text-decoration: underline; cursor: pointer; padding: 8px; font-size: .9rem; }
 
 .cal-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin: 22px 2px 10px; }
 .cal-head h2 { margin: 0; font-size: 1.2rem; }
@@ -166,3 +166,8 @@ html[data-oled="true"] .day.today { background: var(--accent-strong); }
 .check input { width: 24px; height: 24px; accent-color: var(--accent-strong); }
 html[data-oled="true"] .day.blank { background: none; }
 html[data-oled="true"] .day.past { background: #08080a; }
+
+.row-btns { display: flex; gap: 8px; }
+.row-btns .btn { padding: 8px 12px; font-size: 14px; width: auto; }
+.err.ok { color: var(--accent-mid); }
+.token-row .btn { width: auto; padding: 8px 12px; font-size: 14px; }

@@ -36,17 +36,20 @@ test.after(() => { proc.kill(); fs.rmSync(dir, { recursive: true, force: true })
 
 test('everything is locked until a password is set and used', async () => {
   assert.strictEqual((await call('GET', '/api/status')).status, 401);
-  assert.strictEqual((await call('POST', '/api/setup-password', { password: 'short' })).status, 400);
-  assert.strictEqual((await call('POST', '/api/setup-password', { password: 'correct horse' })).status, 200);
-  assert.strictEqual((await call('POST', '/api/setup-password', { password: 'another one!' })).status, 400);
+  assert.strictEqual((await call('GET', '/api/session')).json.setupNeeded, true);
+  assert.strictEqual((await call('POST', '/api/setup', { username: 'admin1', password: 'short' })).status, 400);
+  assert.strictEqual((await call('POST', '/api/setup', { username: 'a b', password: 'correct horse' })).status, 400);
+  assert.strictEqual((await call('POST', '/api/setup', { username: 'admin1', password: 'correct horse' })).status, 200);
+  assert.strictEqual((await call('POST', '/api/setup', { username: 'other', password: 'another one!' })).status, 400);
+  assert.strictEqual((await call('GET', '/api/session')).json.me.role, 'admin');
   assert.strictEqual((await call('GET', '/api/status')).status, 200);
 });
 
 test('wrong password is refused, right one works after logout', async () => {
   await call('POST', '/api/logout', {});
   cookie = '';
-  assert.strictEqual((await call('POST', '/api/login', { password: 'nope nope nope' })).status, 401);
-  assert.strictEqual((await call('POST', '/api/login', { password: 'correct horse' })).status, 200);
+  assert.strictEqual((await call('POST', '/api/login', { username: 'admin1', password: 'nope nope nope' })).status, 401);
+  assert.strictEqual((await call('POST', '/api/login', { username: 'ADMIN1', password: 'correct horse' })).status, 200);
 });
 
 test('settings then readings', async () => {
@@ -58,6 +61,27 @@ test('settings then readings', async () => {
   assert.strictEqual(r.json.latest.odometer, 1000);
   assert.strictEqual((await call('POST', '/api/readings', { odometer: 900, date: '2030-04-05' })).status, 400);
   assert.strictEqual((await call('POST', '/api/readings', { odometer: 5, date: '2029-01-01' })).status, 400);
+});
+
+test('admin adds a user, who can add readings but not manage anything', async () => {
+  const adminCookie = cookie;
+  assert.strictEqual((await call('POST', '/api/users', { username: 'wife', password: 'short' })).status, 400);
+  assert.strictEqual((await call('POST', '/api/users', { username: 'wife', password: 'wife password' })).status, 200);
+  assert.strictEqual((await call('POST', '/api/users', { username: 'Wife', password: 'wife password' })).status, 400);
+  cookie = '';
+  assert.strictEqual((await call('POST', '/api/login', { username: 'wife', password: 'wife password' })).status, 200);
+  const st = await call('GET', '/api/status');
+  assert.strictEqual(st.json.me.role, 'user');
+  assert.strictEqual((await call('POST', '/api/readings', { odometer: 1200, date: '2030-04-03' })).status, 200);
+  assert.strictEqual((await call('GET', '/api/status')).json.readings.find((r) => r.date === '2030-04-03').source, 'web:wife');
+  for (const [m, u, b] of [['GET', '/api/settings'], ['PUT', '/api/settings', SETTINGS], ['PUT', '/api/ui', { accent: 'blue' }], ['GET', '/api/users'], ['POST', '/api/users', { username: 'x1', password: 'password123' }], ['DELETE', '/api/readings/2030-04-03', {}]]) {
+    assert.strictEqual((await call(m, u, b)).status, 403, m + ' ' + u);
+  }
+  assert.strictEqual((await call('POST', '/api/me/password', { current: 'wrong', password: 'newpassword1' })).status, 400);
+  assert.strictEqual((await call('POST', '/api/me/password', { current: 'wife password', password: 'newpassword1' })).status, 200);
+  // clean up the extra reading and keep the admin session for later tests
+  cookie = adminCookie;
+  assert.strictEqual((await call('DELETE', '/api/readings/2030-04-03', {})).status, 200);
 });
 
 test('form posts without JSON are refused', async () => {
@@ -89,6 +113,54 @@ test('api key: shown once, can read and write readings only', async () => {
     assert.strictEqual(r.status, 401, url);
   }
   assert.strictEqual((await agent('GET', '/api/v1/status', undefined, 'op_wrong')).status, 401);
+});
+
+test('every user has their own keys; admin sees and revokes all', async () => {
+  const adminCookie = cookie;
+  cookie = '';
+  await call('POST', '/api/login', { username: 'wife', password: 'newpassword1' });
+  const mine = await call('POST', '/api/tokens', { name: 'Her AI' });
+  assert.strictEqual(mine.status, 200);
+  const herKey = mine.json.key;
+  const herList = (await call('GET', '/api/tokens')).json.tokens;
+  assert.strictEqual(herList.length, 1);
+  assert.strictEqual(herList[0].name, 'Her AI');
+  // Her key works on the agent API and the reading is stamped with her name.
+  const w = await agent('POST', '/api/v1/readings', { odometer: 1300, date: '2030-04-04' }, herKey);
+  assert.strictEqual(w.status, 200);
+  assert.ok((await agent('GET', '/api/v1/readings', undefined, herKey)).json.readings.find((r) => r.date === '2030-04-04').source.includes('wife'));
+  // She cannot see or revoke the admin's key.
+  cookie = adminCookie;
+  const adminList = (await call('GET', '/api/tokens')).json.tokens;
+  assert.strictEqual(adminList.length, 2);
+  const adminsOwn = adminList.find((x) => x.name === 'Test agent');
+  cookie = '';
+  await call('POST', '/api/login', { username: 'wife', password: 'newpassword1' });
+  assert.strictEqual((await call('DELETE', '/api/tokens/' + adminsOwn.id, {})).status, 404);
+  assert.strictEqual((await agent('GET', '/api/v1/status')).status, 200);
+  // Admin can revoke hers.
+  cookie = adminCookie;
+  const hers = adminList.find((x) => x.name === 'Her AI');
+  assert.strictEqual(hers.owner, 'wife');
+  assert.strictEqual((await call('DELETE', '/api/tokens/' + hers.id, {})).status, 200);
+  assert.strictEqual((await agent('GET', '/api/v1/status', undefined, herKey)).status, 401);
+});
+
+test('removing a user ends their sessions and keys', async () => {
+  const adminCookie = cookie;
+  cookie = '';
+  await call('POST', '/api/login', { username: 'wife', password: 'newpassword1' });
+  const wifeCookie = cookie;
+  const k = (await call('POST', '/api/tokens', { name: 'temp' })).json.key;
+  cookie = adminCookie;
+  const users = (await call('GET', '/api/users')).json.users;
+  const wife = users.find((u) => u.username === 'wife');
+  assert.strictEqual((await call('DELETE', '/api/users/' + users.find((u) => u.role === 'admin').id, {})).status, 400);
+  assert.strictEqual((await call('DELETE', '/api/users/' + wife.id, {})).status, 200);
+  cookie = wifeCookie;
+  assert.strictEqual((await call('GET', '/api/status')).status, 401);
+  assert.strictEqual((await agent('GET', '/api/v1/status', undefined, k)).status, 401);
+  cookie = adminCookie;
 });
 
 test('a session cookie does not work on the agent api', async () => {
@@ -125,7 +197,7 @@ test('readings survive a restart', async () => {
   }
   const s = await call('GET', '/api/status');
   assert.strictEqual(s.status, 200);
-  assert.strictEqual(s.json.readings.length, 2);
+  assert.strictEqual(s.json.readings.length, 3);
 });
 
 test('theme choice is saved on the server and validated', async () => {

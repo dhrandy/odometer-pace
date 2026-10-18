@@ -2,6 +2,9 @@
 (function () {
   var app = document.getElementById('app');
   var status = null;
+  var me = { username: '', role: 'user' };
+  var mode = 'app';
+  var scrolledToToday = false;
   var ui = { accent: 'purple', oled: false };
 
   // Remember the theme on this device so the login page matches before the server answers.
@@ -70,32 +73,36 @@
 
   // ---------- login and first run ----------
 
-  function renderPassword(first) {
+  function renderLogin(first) {
+    var name = el('input', { type: 'text', autocomplete: 'username', autocapitalize: 'none', spellcheck: 'false', 'aria-label': 'Username', placeholder: 'Username' });
     var pw = el('input', { type: 'password', autocomplete: first ? 'new-password' : 'current-password', 'aria-label': 'Password', placeholder: 'Password' });
     var err = el('p', { class: 'err', role: 'status' });
     function submit(e) {
       e.preventDefault();
       err.textContent = '';
-      api('POST', first ? '/api/setup-password' : '/api/login', { password: pw.value })
+      api('POST', first ? '/api/setup' : '/api/login', { username: name.value, password: pw.value })
         .then(boot)
         .catch(function (x) { err.textContent = x.message; });
     }
     show(el('div', { class: 'center' }, [el('div', { class: 'card' }, [
       el('h1', { text: 'Odometer Pace' }),
-      el('p', { class: 'sub', text: first ? 'First run. Choose a password (8 or more characters).' : 'Log in to see your mileage.' }),
+      el('p', { class: 'sub', text: first ? 'First run. Create the admin login. Use 8 or more characters for the password.' : 'Log in to see your mileage.' }),
       el('form', { onsubmit: submit }, [
+        el('label', { class: 'field' }, [name]),
+        el('div', { class: 'spacer' }),
         el('label', { class: 'field' }, [pw]),
         el('div', { class: 'spacer' }),
-        el('button', { class: 'btn', type: 'submit', text: first ? 'Save password' : 'Log in' }),
+        el('button', { class: 'btn', type: 'submit', text: first ? 'Create admin' : 'Log in' }),
         err
       ])
     ])]));
-    pw.focus();
+    name.focus();
   }
 
   // ---------- settings ----------
 
   function renderSettings(first) {
+    if (me.role !== 'admin') return first ? renderWaiting() : renderAccount();
     var vehicle = el('input', { type: 'text', maxlength: '60', placeholder: 'Optional, e.g. My lease' });
     var start = el('input', { type: 'date' });
     var years = el('input', { type: 'number', inputmode: 'numeric', min: '1', max: '10', value: '3' });
@@ -150,9 +157,116 @@
       ]));
       loadKeys(keysBox);
     }
-    if (!first) kids.splice(1, 0, appearanceCard());
+    if (!first) {
+      kids.splice(1, 0, appearanceCard());
+      if (mode !== 'proxy') kids.splice(2, 0, usersCard());
+      if (mode !== 'proxy') kids.splice(3, 0, passwordCard());
+    }
     kids.push(el('p', {}, [el('button', { class: 'btn quiet', type: 'button', text: first ? 'Log out' : 'Back', onclick: first ? logout : boot })]));
     show(el('div', { class: 'wrap top' }, kids));
+  }
+
+  // A signed-in user who is not the admin: change password and manage their own API keys.
+  function renderAccount() {
+    var keysBox = el('div');
+    var kids = [
+      el('div', { class: 'card' }, [
+        el('h2', { text: 'Signed in as ' + me.username }),
+        el('p', { class: 'sub', text: 'You can add odometer readings. The admin manages the lease settings and logins.' })
+      ]),
+      passwordCard(),
+      el('div', { class: 'card' }, [
+        el('h2', { text: 'Your API keys' }),
+        el('p', { class: 'sub', text: 'Let your AI or a script add odometer readings and read the status. A key can only do that, nothing else. The key is shown once, so copy it right away.' }),
+        keysBox,
+        el('p', { class: 'note' }, [el('a', { href: '/api/docs', text: 'API docs' })])
+      ]),
+      el('p', {}, [el('button', { class: 'btn quiet', type: 'button', text: 'Back', onclick: boot })])
+    ];
+    loadKeys(keysBox);
+    show(el('div', { class: 'wrap top' }, kids));
+  }
+
+  function renderWaiting() {
+    show(el('div', { class: 'center' }, [el('div', { class: 'card' }, [
+      el('h1', { text: 'Odometer Pace' }),
+      el('p', { class: 'sub', text: 'The admin has not set up the lease yet. Check back after they have.' }),
+      el('button', { class: 'btn quiet', type: 'button', text: 'Log out', onclick: logout })
+    ])]));
+  }
+
+  function passwordCard() {
+    var cur = el('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Current password' });
+    var next = el('input', { type: 'password', autocomplete: 'new-password', placeholder: 'New password (8 or more characters)' });
+    var msg = el('p', { class: 'err', role: 'status' });
+    return el('div', { class: 'card' }, [
+      el('h2', { text: 'Change your password' }),
+      el('form', { onsubmit: function (e) {
+        e.preventDefault();
+        msg.className = 'err';
+        api('POST', '/api/me/password', { current: cur.value, password: next.value }).then(function () {
+          cur.value = ''; next.value = '';
+          msg.className = 'err ok';
+          msg.textContent = 'Password changed.';
+        }).catch(function (x) { msg.textContent = x.message; });
+      } }, [
+        el('label', { class: 'field' }, [cur]), el('div', { class: 'spacer' }),
+        el('label', { class: 'field' }, [next]), el('div', { class: 'spacer' }),
+        el('button', { class: 'btn quiet', type: 'submit', text: 'Change password' }), msg
+      ])
+    ]);
+  }
+
+  // Admin only: add and remove household logins.
+  function usersCard() {
+    var list = el('div');
+    var name = el('input', { type: 'text', maxlength: '30', autocapitalize: 'none', spellcheck: 'false', autocomplete: 'off', placeholder: 'Username' });
+    var pw = el('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Password (8 or more characters)' });
+    var msg = el('p', { class: 'err', role: 'status' });
+
+    function draw() {
+      api('GET', '/api/users').then(function (r) {
+        list.textContent = '';
+        r.users.forEach(function (u) {
+          var row = el('div', { class: 'token-row' }, [el('span', { text: u.username + (u.role === 'admin' ? ' (admin)' : '') })]);
+          if (u.role !== 'admin') {
+            var btns = el('span', { class: 'row-btns' }, [
+              el('button', { class: 'btn quiet', type: 'button', text: 'New password', onclick: function () {
+                var p = prompt('New password for ' + u.username + ' (8 or more characters). They will be logged out.');
+                if (p) api('POST', '/api/users/' + u.id + '/password', { password: p }).then(function () { msg.className = 'err ok'; msg.textContent = 'Password changed for ' + u.username + '.'; }).catch(function (x) { msg.className = 'err'; msg.textContent = x.message; });
+              } }),
+              el('button', { class: 'btn danger', type: 'button', text: 'Remove', onclick: function () {
+                if (confirm('Remove ' + u.username + '? Their API keys stop working. Readings they added stay.')) api('DELETE', '/api/users/' + u.id).then(draw);
+              } })
+            ]);
+            row.appendChild(btns);
+          }
+          list.appendChild(row);
+        });
+      });
+    }
+    draw();
+
+    return el('div', { class: 'card' }, [
+      el('h2', { text: 'Logins' }),
+      el('p', { class: 'sub', text: 'Users can add readings and use their own API keys. Only you, the admin, can change the lease, appearance, logins and delete readings.' }),
+      list,
+      el('div', { class: 'spacer' }),
+      el('form', { onsubmit: function (e) {
+        e.preventDefault();
+        msg.className = 'err';
+        api('POST', '/api/users', { username: name.value, password: pw.value }).then(function () {
+          name.value = ''; pw.value = '';
+          msg.className = 'err ok';
+          msg.textContent = 'Login added.';
+          draw();
+        }).catch(function (x) { msg.textContent = x.message; });
+      } }, [
+        el('label', { class: 'field' }, ['New login', name]), el('div', { class: 'spacer' }),
+        el('label', { class: 'field' }, [pw]), el('div', { class: 'spacer' }),
+        el('button', { class: 'btn', type: 'submit', text: 'Add login' }), msg
+      ])
+    ]);
   }
 
   function appearanceCard() {
@@ -191,7 +305,7 @@
       box.textContent = '';
       r.tokens.forEach(function (t) {
         box.appendChild(el('div', { class: 'token-row' }, [
-          el('span', { text: t.name + (t.last_used ? ' (last used ' + t.last_used.slice(0, 10) + ')' : ' (never used)') }),
+          el('span', { text: t.name + (me.role === 'admin' && t.owner && !t.own ? ' for ' + t.owner : '') + (t.last_used ? ' (last used ' + t.last_used.slice(0, 10) + ')' : ' (never used)') }),
           el('button', { class: 'btn danger', type: 'button', text: 'Revoke', onclick: function () {
             if (confirm('Revoke "' + t.name + '"? Anything using it stops working.')) api('DELETE', '/api/tokens/' + t.id).then(function () { loadKeys(box); });
           } })
@@ -219,6 +333,14 @@
   function logout() { api('POST', '/api/logout', {}).then(boot); }
 
   // ---------- main page ----------
+
+  // Redraw after a save or delete without jumping back to the top.
+  function refresh(st) {
+    var y = window.scrollY;
+    status = st;
+    renderMain();
+    window.scrollTo(0, y);
+  }
 
   function stat(k, v, n, cls) {
     return el('div', { class: 'stat' + (cls ? ' ' + cls : '') }, [
@@ -249,6 +371,12 @@
 
     var wrap = el('div', { class: 'wrap' }, [standCard(s, plan), odometerCard(s, plan), calendar(s, plan)]);
     show(el('div', {}, [hero, wrap]));
+    // On a fresh page load, land on today in the calendar. Saving a reading keeps you where you are.
+    if (!scrolledToToday) {
+      scrolledToToday = true;
+      var today = document.querySelector('.day.today');
+      if (today) today.scrollIntoView({ block: 'center' });
+    }
   }
 
   function standCard(s, plan) {
@@ -282,7 +410,7 @@
       e.preventDefault();
       err.textContent = '';
       api('POST', '/api/readings', { odometer: odo.value, date: date.value })
-        .then(function (st) { status = st; renderMain(); })
+        .then(refresh)
         .catch(function (x) { err.textContent = x.message; });
     }
 
@@ -328,12 +456,14 @@
 
     var log = el('ul', { class: 'log' });
     s.readings.slice().reverse().forEach(function (r) {
-      var who = r.source && r.source !== 'web' ? ' via ' + r.source.replace('api:', '') : '';
+      var who = '';
+      if (r.source && r.source.indexOf('web:') === 0) who = ' by ' + r.source.slice(4);
+      else if (r.source && r.source.indexOf('api:') === 0) who = ' via ' + r.source.slice(4);
       log.appendChild(el('li', {}, [
         el('span', {}, [longDate(r.date) + ' \u00b7 ' + fmt(r.odometer) + ' mi', el('span', { class: 'src', text: who })]),
-        el('button', { type: 'button', text: 'Delete', 'aria-label': 'Delete reading from ' + longDate(r.date), onclick: function () {
-          api('DELETE', '/api/readings/' + r.date).then(function (st) { status = st; renderMain(); });
-        } })
+        me.role === 'admin' ? el('button', { type: 'button', text: 'Delete', 'aria-label': 'Delete reading from ' + longDate(r.date), onclick: function () {
+          api('DELETE', '/api/readings/' + r.date).then(refresh);
+        } }) : null
       ]));
     });
     card.appendChild(log);
@@ -469,16 +599,18 @@
 
   function boot() {
     api('GET', '/api/session').then(function (sess) {
-      if (!sess.passwordSet) return renderPassword(true);
-      if (!sess.loggedIn) return renderPassword(false);
+      mode = sess.mode;
+      if (sess.setupNeeded) return renderLogin(true);
+      if (!sess.loggedIn) return renderLogin(false);
       return api('GET', '/api/status').then(function (st) {
         status = st;
+        if (st.me) me = st.me;
         if (st.ui) applyUi(st.ui);
         if (!st.configured) renderSettings(true);
         else renderMain();
       });
     }).catch(function (e) {
-      if (e.status === 401) return renderPassword(false);
+      if (e.status === 401) return renderLogin(false);
       show(el('div', { class: 'center' }, [el('div', { class: 'card' }, [el('p', { text: 'Could not reach the server: ' + e.message })])]));
     });
   }

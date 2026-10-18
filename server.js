@@ -18,7 +18,7 @@ const DATA_FILE = path.join(DATA_DIR, 'odometer-pace.json');
 // ---------- storage ----------
 
 function emptyData() {
-  return { settings: null, readings: [], tokens: [], auth: null, sessions: [], ui: { accent: 'purple', oled: false } };
+  return { settings: null, readings: [], tokens: [], auth: null, users: [], sessions: [], ui: { accent: 'purple', oled: false } };
 }
 
 function loadData() {
@@ -112,20 +112,24 @@ function readBody(req) {
 
 // ---------- sessions ----------
 
-function isLoggedIn(req) {
-  if (AUTH_MODE === 'proxy') return true;
+// Returns the signed-in person for this request, or null.
+function currentUser(req) {
+  if (AUTH_MODE === 'proxy') return { id: 'proxy', username: 'proxy', role: 'admin' };
   const id = readCookie(req, 'op_session');
-  if (!id) return false;
+  if (!id) return null;
   const hash = sha256(id);
   const now = Date.now();
-  return data.sessions.some((s) => s.hash === hash && s.expires > now);
+  const session = data.sessions.find((x) => x.hash === hash && x.expires > now);
+  if (!session) return null;
+  const user = data.users.find((u) => u.id === session.userId);
+  return user ? { id: user.id, username: user.username, role: user.role } : null;
 }
 
-function startSession(res) {
+function startSession(userId) {
   const id = crypto.randomBytes(32).toString('base64url');
   const now = Date.now();
-  data.sessions = data.sessions.filter((s) => s.expires > now);
-  data.sessions.push({ hash: sha256(id), expires: now + SESSION_DAYS * 86400000 });
+  data.sessions = data.sessions.filter((x) => x.expires > now);
+  data.sessions.push({ hash: sha256(id), expires: now + SESSION_DAYS * 86400000, userId: userId });
   saveData();
   const cookie = ['op_session=' + id, 'Path=/', 'HttpOnly', 'SameSite=Strict', 'Max-Age=' + SESSION_DAYS * 86400];
   if (COOKIE_SECURE) cookie.push('Secure');
@@ -135,9 +139,29 @@ function startSession(res) {
 function endSession(req) {
   const id = readCookie(req, 'op_session');
   if (id) {
-    data.sessions = data.sessions.filter((s) => s.hash !== sha256(id));
+    data.sessions = data.sessions.filter((x) => x.hash !== sha256(id));
     saveData();
   }
+}
+
+const USERNAME = /^[A-Za-z0-9._-]{2,30}$/;
+
+function makeUser(username, password, role) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  return { id: crypto.randomBytes(6).toString('hex'), username: username, role: role, salt: salt, hash: hashPassword(password, salt), created: new Date().toISOString() };
+}
+
+function findUser(username) {
+  const name = String(username || '').toLowerCase();
+  return data.users.find((u) => u.username.toLowerCase() === name) || null;
+}
+
+// Runs the same slow hash for unknown names so timing does not reveal which usernames exist.
+const DUMMY = { salt: 'x'.repeat(32), hash: hashPassword('dummy', 'x'.repeat(32)) };
+function passwordMatches(user, password) {
+  const u = user || DUMMY;
+  const ok = safeEqual(u.hash, hashPassword(password, u.salt));
+  return !!user && ok;
 }
 
 // ---------- agent tokens ----------
@@ -257,7 +281,7 @@ async function handleApi(req, res, url) {
       try { b = await readBody(req); } catch (e) { return sendJson(res, 400, { error: 'Send a JSON body like {"odometer": 1234}.' }); }
       const odometer = Number(String(b.odometer).replace(/,/g, ''));
       const date = b.date ? String(b.date) : todayKey();
-      const err = addReading(date, odometer, 'api:' + token.name);
+      const err = addReading(date, odometer, 'api:' + token.name + (token.ownerName ? ' (' + token.ownerName + ')' : ''));
       if (err) return sendJson(res, 400, { error: err });
       return sendJson(res, 200, { saved: { date: date, odometer: odometer }, status: statusBody() });
     }
@@ -266,31 +290,37 @@ async function handleApi(req, res, url) {
 
   // Everything below is the web app.
   if (p === '/api/session' && method === 'GET') {
+    const me = currentUser(req);
     return sendJson(res, 200, {
       mode: AUTH_MODE,
-      passwordSet: AUTH_MODE === 'proxy' ? true : !!data.auth,
-      loggedIn: isLoggedIn(req)
+      setupNeeded: AUTH_MODE !== 'proxy' && data.users.length === 0,
+      loggedIn: !!me,
+      me: me ? { username: me.username, role: me.role } : null
     });
   }
 
-  if ((p === '/api/setup-password' || p === '/api/login') && method === 'POST') {
+  if ((p === '/api/setup' || p === '/api/login') && method === 'POST') {
     if (AUTH_MODE === 'proxy') return sendJson(res, 400, { error: 'Login is handled by the reverse proxy.' });
     if (tooManyFailures(ip)) return sendJson(res, 429, { error: 'Too many attempts. Try again in a few minutes.' });
     let b;
     try { b = await readBody(req); } catch (e) { return sendJson(res, 400, { error: 'Bad request.' }); }
+    const username = String(b.username || '').trim();
     const password = String(b.password || '');
-    if (p === '/api/setup-password') {
-      if (data.auth) return sendJson(res, 400, { error: 'A password is already set.' });
+    let user;
+    if (p === '/api/setup') {
+      if (data.users.length) return sendJson(res, 400, { error: 'An admin account already exists.' });
+      if (!USERNAME.test(username)) return sendJson(res, 400, { error: 'Username: 2 to 30 letters, numbers, dots, dashes or underscores.' });
       if (password.length < 8) return sendJson(res, 400, { error: 'Use at least 8 characters.' });
-      const salt = crypto.randomBytes(16).toString('hex');
-      data.auth = { salt: salt, hash: hashPassword(password, salt) };
+      user = makeUser(username, password, 'admin');
+      data.users.push(user);
     } else {
-      if (!data.auth || !safeEqual(data.auth.hash, hashPassword(password, data.auth.salt))) {
+      user = findUser(username);
+      if (!passwordMatches(user, password)) {
         noteFailure(ip);
-        return sendJson(res, 401, { error: 'Wrong password.' });
+        return sendJson(res, 401, { error: 'Wrong username or password.' });
       }
     }
-    return sendJson(res, 200, { ok: true }, { 'Set-Cookie': startSession(res) });
+    return sendJson(res, 200, { ok: true }, { 'Set-Cookie': startSession(user.id) });
   }
 
   if (p === '/api/logout' && method === 'POST') {
@@ -298,16 +328,20 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, { ok: true }, { 'Set-Cookie': 'op_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0' });
   }
 
-  if (!isLoggedIn(req)) return sendJson(res, 401, { error: 'Log in first.' });
+  const me = currentUser(req);
+  if (!me) return sendJson(res, 401, { error: 'Log in first.' });
+  const isAdmin = me.role === 'admin';
+  const adminOnly = () => sendJson(res, 403, { error: 'Only the admin can do that.' });
 
   // Mutations must be JSON, which a cross-site form cannot send.
   if (method !== 'GET' && !String(req.headers['content-type'] || '').startsWith('application/json')) {
     return sendJson(res, 415, { error: 'Send JSON.' });
   }
 
-  if (p === '/api/status' && method === 'GET') return sendJson(res, 200, Object.assign(statusBody(), { ui: uiBody() }));
+  if (p === '/api/status' && method === 'GET') return sendJson(res, 200, Object.assign(statusBody(), { ui: uiBody(), me: { username: me.username, role: me.role } }));
 
   if (p === '/api/ui' && method === 'PUT') {
+    if (!isAdmin) return adminOnly();
     let b;
     try { b = await readBody(req); } catch (e) { return sendJson(res, 400, { error: 'Bad request.' }); }
     if (!ACCENTS.includes(b.accent)) return sendJson(res, 400, { error: 'Unknown color.' });
@@ -317,6 +351,7 @@ async function handleApi(req, res, url) {
   }
 
   if (p === '/api/settings') {
+    if (!isAdmin) return adminOnly();
     if (method === 'GET') return sendJson(res, 200, { settings: data.settings });
     if (method === 'PUT') {
       let b;
@@ -334,21 +369,81 @@ async function handleApi(req, res, url) {
     try { b = await readBody(req); } catch (e) { return sendJson(res, 400, { error: 'Bad request.' }); }
     const odometer = Number(String(b.odometer).replace(/,/g, ''));
     const date = String(b.date || todayKey());
-    const err = addReading(date, odometer, 'web');
+    const err = addReading(date, odometer, 'web:' + me.username);
     if (err) return sendJson(res, 400, { error: err });
     return sendJson(res, 200, statusBody());
   }
 
   const del = /^\/api\/readings\/(\d{4}-\d{2}-\d{2})$/.exec(p);
   if (del && method === 'DELETE') {
+    if (!isAdmin) return adminOnly();
     data.readings = data.readings.filter((r) => r.date !== del[1]);
     saveData();
     return sendJson(res, 200, statusBody());
   }
 
+  // Your own password.
+  if (p === '/api/me/password' && method === 'POST') {
+    if (AUTH_MODE === 'proxy') return sendJson(res, 400, { error: 'Login is handled by the reverse proxy.' });
+    let b;
+    try { b = await readBody(req); } catch (e) { return sendJson(res, 400, { error: 'Bad request.' }); }
+    const user = data.users.find((u) => u.id === me.id);
+    if (!passwordMatches(user, String(b.current || ''))) return sendJson(res, 400, { error: 'Current password is wrong.' });
+    if (String(b.password || '').length < 8) return sendJson(res, 400, { error: 'Use at least 8 characters.' });
+    user.salt = crypto.randomBytes(16).toString('hex');
+    user.hash = hashPassword(String(b.password), user.salt);
+    saveData();
+    return sendJson(res, 200, { ok: true });
+  }
+
+  // Logins for the household. Admin only.
+  if (p === '/api/users' || p.startsWith('/api/users/')) {
+    if (!isAdmin) return adminOnly();
+    if (AUTH_MODE === 'proxy') return sendJson(res, 400, { error: 'Logins are handled by the reverse proxy.' });
+    if (p === '/api/users' && method === 'GET') {
+      return sendJson(res, 200, { users: data.users.map((u) => ({ id: u.id, username: u.username, role: u.role })) });
+    }
+    let b = {};
+    if (method !== 'DELETE') {
+      try { b = await readBody(req); } catch (e) { return sendJson(res, 400, { error: 'Bad request.' }); }
+    }
+    if (p === '/api/users' && method === 'POST') {
+      const username = String(b.username || '').trim();
+      if (!USERNAME.test(username)) return sendJson(res, 400, { error: 'Username: 2 to 30 letters, numbers, dots, dashes or underscores.' });
+      if (findUser(username)) return sendJson(res, 400, { error: 'That username is taken.' });
+      if (String(b.password || '').length < 8) return sendJson(res, 400, { error: 'Use at least 8 characters.' });
+      data.users.push(makeUser(username, String(b.password), 'user'));
+      saveData();
+      return sendJson(res, 200, { ok: true });
+    }
+    const one = /^\/api\/users\/([a-f0-9]+)(\/password)?$/.exec(p);
+    const target = one && data.users.find((u) => u.id === one[1]);
+    if (!target) return sendJson(res, 404, { error: 'No such user.' });
+    if (one[2] && method === 'POST') {
+      if (String(b.password || '').length < 8) return sendJson(res, 400, { error: 'Use at least 8 characters.' });
+      target.salt = crypto.randomBytes(16).toString('hex');
+      target.hash = hashPassword(String(b.password), target.salt);
+      data.sessions = data.sessions.filter((x) => x.userId !== target.id);
+      saveData();
+      return sendJson(res, 200, { ok: true });
+    }
+    if (!one[2] && method === 'DELETE') {
+      if (target.id === me.id) return sendJson(res, 400, { error: 'You cannot remove your own login.' });
+      if (target.role === 'admin') return sendJson(res, 400, { error: 'The admin login cannot be removed.' });
+      data.users = data.users.filter((u) => u.id !== target.id);
+      data.tokens = data.tokens.filter((t) => t.ownerId !== target.id);
+      data.sessions = data.sessions.filter((x) => x.userId !== target.id);
+      saveData();
+      return sendJson(res, 200, { ok: true });
+    }
+    return sendJson(res, 404, { error: 'Not found.' });
+  }
+
   if (p === '/api/tokens') {
     if (method === 'GET') {
-      return sendJson(res, 200, { tokens: data.tokens.map((t) => ({ id: t.id, name: t.name, created: t.created, last_used: t.last_used || null })) });
+      // Everyone sees their own keys. The admin sees all of them.
+      const mine = data.tokens.filter((t) => isAdmin || t.ownerId === me.id);
+      return sendJson(res, 200, { tokens: mine.map((t) => ({ id: t.id, name: t.name, owner: t.ownerName || '', own: t.ownerId === me.id, created: t.created, last_used: t.last_used || null })) });
     }
     if (method === 'POST') {
       let b;
@@ -356,7 +451,7 @@ async function handleApi(req, res, url) {
       const name = String(b.name || '').trim().slice(0, 40);
       if (!name) return sendJson(res, 400, { error: 'Give the key a name.' });
       const key = 'op_' + crypto.randomBytes(32).toString('base64url');
-      data.tokens.push({ id: crypto.randomBytes(6).toString('hex'), name: name, hash: sha256(key), created: new Date().toISOString() });
+      data.tokens.push({ id: crypto.randomBytes(6).toString('hex'), name: name, ownerId: me.id, ownerName: me.username, hash: sha256(key), created: new Date().toISOString() });
       saveData();
       // The key is shown this once and only its hash is kept.
       return sendJson(res, 200, { key: key, name: name });
@@ -365,7 +460,9 @@ async function handleApi(req, res, url) {
 
   const delTok = /^\/api\/tokens\/([a-f0-9]+)$/.exec(p);
   if (delTok && method === 'DELETE') {
-    data.tokens = data.tokens.filter((t) => t.id !== delTok[1]);
+    const tok = data.tokens.find((t) => t.id === delTok[1]);
+    if (!tok || (!isAdmin && tok.ownerId !== me.id)) return sendJson(res, 404, { error: 'No such key.' });
+    data.tokens = data.tokens.filter((t) => t.id !== tok.id);
     saveData();
     return sendJson(res, 200, { ok: true });
   }
@@ -394,7 +491,7 @@ function serveStatic(req, res, url) {
   if (p === '/') p = '/index.html';
   if (p === '/lease.js') return sendStatic(res, path.join(__dirname, 'lib', 'lease.js'), TYPES['.js']);
   if (p === '/api/docs') {
-    if (!isLoggedIn(req)) { res.writeHead(302, { Location: '/' }); res.end(); return; }
+    if (!currentUser(req)) { res.writeHead(302, { Location: '/' }); res.end(); return; }
     return sendStatic(res, path.join(PUBLIC_DIR, 'docs.html'), TYPES['.html']);
   }
   if (p === '/docs.html') { res.writeHead(404); res.end('Not found'); return; }

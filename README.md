@@ -9,7 +9,8 @@ A small self-hosted page that tracks a car lease's mileage. It shows every day o
 - Chart of your readings against the allowed line
 - One container, one small JSON file in a volume, no database server
 - Dark theme with six accent colors (purple by default) and an OLED black option, set in Settings, works on phones
-- API keys so an AI or script can add readings and read your status
+- Admin and user logins: the admin sets up the lease, everyone else can add readings
+- API keys so an AI or script can add readings and read your status, one set per person
 - Your lease details are typed in the app on first run. Nothing about your lease is in the code.
 
 ## Setup
@@ -17,7 +18,7 @@ A small self-hosted page that tracks a car lease's mileage. It shows every day o
 1. Copy `docker-compose.yml` into a new stack (Dockhand, Portainer, plain Docker, anything that reads Compose files).
 2. Fill in the variables. Either put them in a `.env` file next to the compose file, or paste them in Dockhand's Environment tab. Do not add `:-` defaults, some tools choke on them.
 3. Start the stack.
-4. Open `http://your-server:8461`. The first screen asks you to choose a password.
+4. Open `http://your-server:8461`. The first screen creates the admin login (a username and a password).
 5. Enter your lease: start date, number of years, total miles allowed, and the odometer reading on the day you got the car.
 
 ### Variables
@@ -80,11 +81,30 @@ If you would rather put your own login in front (Authentik, Authelia and similar
 
 The app sends `noindex` headers and a `robots.txt` that disallows everything. Your server settings, readings and keys are never reachable without logging in.
 
+## Admin and users
+
+The first login you create is the admin. The admin adds logins for the rest of the household in Settings, under Logins.
+
+| | Admin | User |
+| --- | --- | --- |
+| See the calendar, stats and chart | yes | yes |
+| Add odometer readings | yes | yes |
+| Delete readings | yes | no |
+| Change lease settings and appearance | yes | no |
+| Add, remove and reset logins | yes | no |
+| Create and revoke their own API keys | yes | yes |
+| See and revoke everyone's API keys | yes | no |
+| Change their own password | yes | yes |
+
+Each reading shows who entered it. Removing a user also removes their API keys. The admin login itself cannot be removed, and there is no password reset by email, so the admin sets a new password for a user from Settings. If the admin forgets their own password, stop the container, delete the `users` list from `odometer-pace.json` in your data folder, and start it again to create a new admin.
+
+With `AUTH_MODE=proxy` there are no logins in the app. Everyone who gets through your proxy counts as the admin.
+
 ## API keys for AI and scripts
 
-Open Settings, then API keys, give the key a name and create it. The key is shown once, so copy it then. Only a hash is stored. Revoke it any time.
+Everyone with a login (admin or user) can open Settings, then API keys, give a key a name and create it. The key is shown once, so copy it then. Only a hash is stored. A key belongs to the person who made it, and the admin can see and revoke all keys.
 
-A key can add odometer readings and read your status and readings. It cannot see settings, other keys, or the login. The full docs, with examples, are at `/api/docs` after you log in.
+A key can add odometer readings and read the status and readings. It cannot see settings, logins, or other keys. The full docs, with examples, are at `/api/docs` after you log in.
 
 ```
 curl -H "Authorization: Bearer $KEY" https://your-host/api/v1/status
