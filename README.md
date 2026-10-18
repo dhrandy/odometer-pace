@@ -81,6 +81,15 @@ If you would rather put your own login in front (Authentik, Authelia and similar
 
 The app sends `noindex` headers and a `robots.txt` that disallows everything. Your server settings, readings and keys are never reachable without logging in.
 
+## Running a second copy for another car
+
+The app tracks one vehicle. For another car, run a second copy as its own stack. Nothing is shared between copies.
+
+1. Paste the compose file again as a new stack, and change the service name and `container_name` to something unique, for example `odometer-pace-2`.
+2. Use a different `PORT` (for example `8462`) and a different `DATA_PATH` (for example `/DATA/AppData/odometer-pace-2`).
+3. Open the new port. It starts empty, so you create its own admin login and enter that car's lease.
+4. Give the second copy its own address in your reverse proxy, and its own API keys.
+
 ## Admin and users
 
 The first login you create is the admin. The admin adds logins for the rest of the household in Settings, under Logins.
