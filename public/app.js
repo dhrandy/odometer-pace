@@ -40,6 +40,34 @@
     return node;
   }
 
+  // Small inline icons, drawn here so nothing is loaded from elsewhere. They use the text color.
+  var ICONS = {
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+    logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
+    back: '<path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>',
+    trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
+    today: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3"/><path d="M12 19v3"/><path d="M2 12h3"/><path d="M19 12h3"/>',
+    key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9"/><path d="M16 7l3 3"/>',
+    userx: '<circle cx="9" cy="8" r="4"/><path d="M2 21v-1a6 6 0 0 1 6-6h2"/><path d="M16 16l5 5"/><path d="M21 16l-5 5"/>',
+    ban: '<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>'
+  };
+
+  function icon(name) {
+    var s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    s.setAttribute('viewBox', '0 0 24 24');
+    s.setAttribute('width', '22'); s.setAttribute('height', '22');
+    s.setAttribute('fill', 'none'); s.setAttribute('stroke', 'currentColor');
+    s.setAttribute('stroke-width', '2'); s.setAttribute('stroke-linecap', 'round'); s.setAttribute('stroke-linejoin', 'round');
+    s.setAttribute('aria-hidden', 'true'); s.setAttribute('focusable', 'false');
+    s.innerHTML = ICONS[name];
+    return s;
+  }
+
+  // A button that shows only an icon. The label feeds screen readers and the hover tooltip.
+  function iconBtn(name, label, onclick, cls) {
+    return el('button', { class: 'icon-btn' + (cls ? ' ' + cls : ''), type: 'button', 'aria-label': label, title: label, onclick: onclick }, [icon(name)]);
+  }
+
   function api(method, path, body) {
     var opts = { method: method, headers: {}, credentials: 'same-origin' };
     if (method !== 'GET') {
@@ -107,6 +135,8 @@
     var years = el('input', { type: 'number', inputmode: 'numeric', min: '1', max: '10', value: '3' });
     var total = el('input', { type: 'number', inputmode: 'numeric', min: '1', placeholder: 'e.g. 36000' });
     var odo = el('input', { type: 'number', inputmode: 'numeric', min: '0', placeholder: 'Miles on the odometer at delivery' });
+    var planFrom = el('input', { type: 'date' });
+    var planPerDay = el('input', { type: 'number', inputmode: 'decimal', min: '0', max: '1000', step: 'any', placeholder: 'e.g. 30' });
     var err = el('p', { class: 'err', role: 'status' });
     var keysBox = el('div');
 
@@ -115,6 +145,7 @@
       if (!s) return;
       vehicle.value = s.vehicle || ''; start.value = s.startDate; years.value = s.years;
       total.value = s.totalMiles; odo.value = s.startOdometer;
+      planFrom.value = s.planFrom || ''; planPerDay.value = s.planPerDay === undefined ? '' : s.planPerDay;
     });
 
     function save(e) {
@@ -122,7 +153,8 @@
       err.textContent = '';
       err.className = 'err';
       api('PUT', '/api/settings', {
-        vehicle: vehicle.value, startDate: start.value, years: years.value, totalMiles: total.value, startOdometer: odo.value
+        vehicle: vehicle.value, startDate: start.value, years: years.value, totalMiles: total.value, startOdometer: odo.value,
+        planFrom: planFrom.value, planPerDay: planPerDay.value
       }).then(boot).catch(function (x) { err.textContent = x.message; });
     }
 
@@ -139,6 +171,13 @@
           el('label', { class: 'field' }, ['Term in years', years]),
           el('label', { class: 'field' }, ['Total miles allowed', total]),
           el('label', { class: 'field' }, ['Starting odometer', odo])
+        ]),
+        el('div', { class: 'spacer' }),
+        el('h3', { class: 'minor', text: 'Planned change (optional)' }),
+        el('p', { class: 'sub', text: 'If your driving will change, say so here. Until that date the projection uses your pace so far. After it, the projection uses the miles per day you enter. Leave both empty to skip.' }),
+        el('div', { class: 'form-row' }, [
+          el('label', { class: 'field' }, ['From this date', planFrom]),
+          el('label', { class: 'field' }, ['Expected miles per day', planPerDay])
         ]),
         el('div', { class: 'spacer' }),
         el('button', { class: 'btn', type: 'submit', text: 'Save' }),
@@ -161,7 +200,7 @@
       if (mode !== 'proxy') kids.splice(2, 0, usersCard());
       if (mode !== 'proxy') kids.splice(3, 0, passwordCard());
     }
-    kids.push(el('p', {}, [el('button', { class: 'btn quiet', type: 'button', text: first ? 'Log out' : 'Back', onclick: first ? logout : boot })]));
+    kids.push(el('p', {}, [first ? iconBtn('logout', 'Log out', logout, 'quiet') : iconBtn('back', 'Back', boot, 'quiet')]));
     show(el('div', { class: 'wrap top' }, kids));
   }
 
@@ -181,7 +220,7 @@
         keysBox,
         el('p', { class: 'note' }, [el('a', { href: '/api/docs', text: 'API docs' })])
       ]),
-      el('p', {}, [el('button', { class: 'btn quiet', type: 'button', text: 'Back', onclick: boot })])
+      el('p', {}, [iconBtn('back', 'Back', boot, 'quiet')])
     ];
     loadKeys(keysBox);
     show(el('div', { class: 'wrap top' }, kids));
@@ -191,7 +230,7 @@
     show(el('div', { class: 'center' }, [el('div', { class: 'card' }, [
       el('h1', { text: 'Odometer Pace' }),
       el('p', { class: 'sub', text: 'The admin has not set up the lease yet. Check back after they have.' }),
-      el('button', { class: 'btn quiet', type: 'button', text: 'Log out', onclick: logout })
+      iconBtn('logout', 'Log out', logout, 'quiet')
     ])]));
   }
 
@@ -231,13 +270,13 @@
           var row = el('div', { class: 'token-row' }, [el('span', { text: u.username + (u.role === 'admin' ? ' (admin)' : '') })]);
           if (u.role !== 'admin') {
             var btns = el('span', { class: 'row-btns' }, [
-              el('button', { class: 'btn quiet', type: 'button', text: 'New password', onclick: function () {
+              iconBtn('key', 'New password for ' + u.username, function () {
                 var p = prompt('New password for ' + u.username + ' (8 or more characters). They will be logged out.');
                 if (p) api('POST', '/api/users/' + u.id + '/password', { password: p }).then(function () { msg.className = 'err ok'; msg.textContent = 'Password changed for ' + u.username + '.'; }).catch(function (x) { msg.className = 'err'; msg.textContent = x.message; });
-              } }),
-              el('button', { class: 'btn danger', type: 'button', text: 'Remove', onclick: function () {
+              }, 'quiet'),
+              iconBtn('userx', 'Remove ' + u.username, function () {
                 if (confirm('Remove ' + u.username + '? Their API keys stop working. Readings they added stay.')) api('DELETE', '/api/users/' + u.id).then(draw);
-              } })
+              }, 'danger')
             ]);
             row.appendChild(btns);
           }
@@ -306,9 +345,9 @@
       r.tokens.forEach(function (t) {
         box.appendChild(el('div', { class: 'token-row' }, [
           el('span', { text: t.name + (me.role === 'admin' && t.owner && !t.own ? ' for ' + t.owner : '') + (t.last_used ? ' (last used ' + t.last_used.slice(0, 10) + ')' : ' (never used)') }),
-          el('button', { class: 'btn danger', type: 'button', text: 'Revoke', onclick: function () {
+          iconBtn('ban', 'Revoke key ' + t.name, function () {
             if (confirm('Revoke "' + t.name + '"? Anything using it stops working.')) api('DELETE', '/api/tokens/' + t.id).then(function () { loadKeys(box); });
-          } })
+          }, 'danger')
         ]));
       });
       var name = el('input', { type: 'text', maxlength: '40', placeholder: 'Key name, e.g. Instinct' });
@@ -356,8 +395,8 @@
       el('div', { class: 'topbar' }, [
         el('span', { class: 'brand', text: 'Odometer Pace' }),
         el('nav', {}, [
-          el('button', { class: 'link-btn', type: 'button', text: 'Settings', onclick: function () { renderSettings(false); } }),
-          el('button', { class: 'link-btn', type: 'button', text: 'Log out', onclick: logout })
+          iconBtn('gear', 'Settings', function () { renderSettings(false); }, 'on-hero'),
+          iconBtn('logout', 'Log out', logout, 'on-hero')
         ])
       ]),
       el('h1', { text: fmt(L.total_miles) + ' Miles, Day by Day' }),
@@ -432,6 +471,14 @@
       b.miles_over_pace === 0 ? 'Right on pace' : fmt(Math.abs(b.miles_over_pace)) + ' mi ' + (over ? 'over' : 'under') + ' pace',
       ' ', el('small', { text: 'as of ' + longDate(b.date) })
     ]));
+    var w = b.warning || s.warning;
+    if (w && w.level !== 'none') {
+      var names = { watch: 'Watch', warning: 'Warning', urgent: 'Urgent' };
+      card.appendChild(el('div', { class: 'alert ' + w.level, role: 'status' }, [
+        el('strong', { text: names[w.level] + ': ' }), w.message
+      ]));
+    }
+    if (w && w.stale_note) card.appendChild(el('p', { class: 'note', text: w.stale_note }));
     var stats = el('div', { class: 'stats' }, [
       stat('Your reading', fmt(b.odometer), longDate(b.date)),
       stat('On pace', fmt(b.on_pace_odometer), 'odometer you should be at'),
@@ -440,7 +487,7 @@
       stat('Your pace', fmt1(b.miles_per_day_so_far) + '/day', 'since the lease started'),
       b.miles_per_day_to_stay_under === null ? null : stat('To stay under', fmt1(b.miles_per_day_to_stay_under) + '/day', 'for the days that are left'),
       stat('Projected at end', b.projected_end_odometer === null ? 'n/a' : fmt(b.projected_end_odometer),
-        b.projected_vs_limit === null ? '' : (projOver ? fmt(b.projected_vs_limit) + ' over' : fmt(-b.projected_vs_limit) + ' under') + ' the limit', projOver ? 'over' : b.projected_vs_limit === null ? '' : 'under'),
+        b.projected_vs_limit === null ? '' : (projOver ? fmt(b.projected_vs_limit) + ' over' : fmt(-b.projected_vs_limit) + ' under') + ' the limit' + (b.projected_includes_plan ? ', with your planned ' + s.lease.planned_change.miles_per_day + ' mi/day from ' + longDate(s.lease.planned_change.from) : ''), projOver ? 'over' : b.projected_vs_limit === null ? '' : 'under'),
       stat('Miles used', fmt(b.miles_used), 'of ' + fmt(s.lease.total_miles) + ' allowed')
     ]);
     card.appendChild(stats);
@@ -456,9 +503,9 @@
       else if (r.source && r.source.indexOf('api:') === 0) who = ' via ' + r.source.slice(4);
       log.appendChild(el('li', {}, [
         el('span', {}, [longDate(r.date) + ' \u00b7 ' + fmt(r.odometer) + ' mi', el('span', { class: 'src', text: who })]),
-        me.role === 'admin' ? el('button', { type: 'button', text: 'Delete', 'aria-label': 'Delete reading from ' + longDate(r.date), onclick: function () {
+        me.role === 'admin' ? iconBtn('trash', 'Delete reading from ' + longDate(r.date), function () {
           api('DELETE', '/api/readings/' + r.date).then(refresh);
-        } }) : null
+        }, 'danger') : null
       ]));
     });
     card.appendChild(log);
@@ -537,9 +584,9 @@
 
     box.appendChild(el('div', { class: 'cal-head' }, [
       el('h2', { text: 'Every day of the lease' }),
-      el('button', { class: 'btn quiet', type: 'button', text: 'Jump to today', onclick: function () {
+      iconBtn('today', 'Jump to today', function () {
         if (todayCell) todayCell.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      } })
+      }, 'quiet')
     ]));
     box.appendChild(el('p', { class: 'note', text: 'Each box shows the day and the total miles you may have driven by the end of that day. Crossed-off days are behind you. An amber dot marks a day with a reading.' }));
 

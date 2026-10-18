@@ -53,3 +53,51 @@ test('invalid settings give no plan', () => {
   assert.strictEqual(Lease.makePlan({ startDate: 'nope', years: 3, totalMiles: 1, startOdometer: 0 }), null);
   assert.strictEqual(Lease.makePlan({ startDate: '2030-01-01', years: 0, totalMiles: 1, startOdometer: 0 }), null);
 });
+
+test('warning levels follow the latest reading and the projection', () => {
+  const plan = Lease.makePlan({ startDate: '2030-01-01', years: 3, totalMiles: 36000, startOdometer: 0 });
+  const w = (odo, today) => Lease.warning(plan, Lease.evaluate(plan, [{ date: '2030-07-01', odometer: odo }]), today || '2030-07-03');
+  assert.strictEqual(w(5000).level, 'none');
+  assert.strictEqual(w(5000).message, '');
+  assert.strictEqual(w(6000).level, 'warning');
+  assert.match(w(6000).message, /finish about [\d,]+ mi over the limit/);
+  assert.strictEqual(w(10000).level, 'urgent');
+  assert.strictEqual(w(40000).level, 'urgent');
+  assert.match(w(40000).message, /past the/);
+  assert.strictEqual(Lease.warning(plan, null, '2030-07-03').level, 'none');
+});
+
+test('a reading from a week ago still gives a warning, and old readings add a quiet note', () => {
+  const plan = Lease.makePlan({ startDate: '2030-01-01', years: 3, totalMiles: 36000, startOdometer: 0 });
+  const ev = Lease.evaluate(plan, [{ date: '2030-07-01', odometer: 7000 }]);
+  const week = Lease.warning(plan, ev, '2030-07-08');
+  assert.strictEqual(week.level, 'urgent');
+  assert.strictEqual(week.stale_note, '');
+  assert.strictEqual(week.days_since_reading, 7);
+  const old = Lease.warning(plan, ev, '2030-07-15');
+  assert.match(old.stale_note, /14 days ago/);
+});
+
+test('a planned change lowers the projection after its date and leaves it alone before', () => {
+  const base = { startDate: '2030-01-01', years: 3, totalMiles: 36000, startOdometer: 0 };
+  const plain = Lease.makePlan(base);
+  const readings = [{ date: '2030-07-01', odometer: 7000 }];
+  const noPlan = Lease.evaluate(plain, readings);
+  assert.strictEqual(noPlan.usesPlan, false);
+  // The same pace until a date past the end of the lease changes nothing important.
+  const later = Lease.evaluate(Lease.makePlan(Object.assign({ planFrom: '2032-12-31', planPerDay: 5 }, base)), readings);
+  assert.ok(Math.abs(later.projected - noPlan.projected) < 60);
+  // A planned drop to 20 a day from Sept 1 ends well under the no-plan projection.
+  const plan = Lease.makePlan(Object.assign({ planFrom: '2030-09-01', planPerDay: 20 }, base));
+  const withPlan = Lease.evaluate(plan, readings);
+  assert.strictEqual(withPlan.usesPlan, true);
+  assert.ok(withPlan.projected < noPlan.projected - 5000);
+  // A plan that already started applies for all the days left.
+  const started = Lease.evaluate(Lease.makePlan(Object.assign({ planFrom: '2030-06-01', planPerDay: 20 }, base)), readings);
+  assert.strictEqual(started.projected, Math.round(7000 + 20 * started.daysLeft));
+  const note = Lease.warning(plan, withPlan, '2030-07-03');
+  assert.strictEqual(note.level, 'watch');
+  assert.match(note.message, /planned 20 mi\/day from 2030-09-01/);
+  // An empty or invalid plan is ignored.
+  assert.strictEqual(Lease.makePlan(Object.assign({ planFrom: '', planPerDay: '' }, base)).change, null);
+});

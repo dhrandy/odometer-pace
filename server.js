@@ -220,6 +220,7 @@ function statusBody() {
       odometer_limit: plan.limit,
       day_of_lease: idx < 0 ? 0 : Math.min(idx + 1, plan.dayCount),
       days_total: plan.dayCount,
+      planned_change: plan.change ? { from: plan.change.from, miles_per_day: plan.change.perDay } : null,
       state: idx < 0 ? 'not_started' : idx >= plan.dayCount ? 'complete' : 'active'
     },
     allowed_odometer_today: plan.startOdometer + Lease.allowedThrough(plan, idx),
@@ -238,10 +239,12 @@ function statusBody() {
       miles_per_day_so_far: round1(ev.perDay),
       miles_per_day_to_stay_under: round1(ev.neededPerDay),
       projected_end_odometer: ev.projected,
+      projected_includes_plan: ev.usesPlan,
       projected_vs_limit: ev.projected === null ? null : ev.projected - plan.limit,
       days_left: ev.daysLeft
     };
   }
+  body.warning = Lease.warning(plan, ev, today);
   return body;
 }
 
@@ -273,6 +276,14 @@ function cleanSettings(b) {
     totalMiles: Number(b.totalMiles),
     startOdometer: Number(b.startOdometer)
   };
+  const from = String(b.planFrom || '').trim();
+  const perDay = String(b.planPerDay === undefined || b.planPerDay === null ? '' : b.planPerDay).trim();
+  if (from || perDay) {
+    // The planned change is optional, but half of it is not allowed.
+    if (!Lease.isDateKey(from) || perDay === '' || !(Number(perDay) >= 0 && Number(perDay) <= 1000)) return 'plan';
+    s.planFrom = from;
+    s.planPerDay = Number(perDay);
+  }
   return Lease.makePlan(s) ? s : null;
 }
 
@@ -376,6 +387,7 @@ async function handleApi(req, res, url) {
       let b;
       try { b = await readBody(req); } catch (e) { return sendJson(res, 400, { error: 'Bad request.' }); }
       const s = cleanSettings(b);
+      if (s === 'plan') return sendJson(res, 400, { error: 'For a planned change, fill in both the date and the miles per day (0 to 1000), or leave both empty.' });
       if (!s) return sendJson(res, 400, { error: 'Check the lease settings: a valid start date, 1 to 10 years, total miles and a starting odometer.' });
       data.settings = s;
       saveData();

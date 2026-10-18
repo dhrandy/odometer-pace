@@ -36,6 +36,10 @@
       <p class="note">Numbers above are an invented example. <code>miles_over_pace</code> is negative when you are under. <code>latest</code> is null until the first reading.</p>
     </div>
     <div class="card">
+      <h2>The warning field</h2>
+      <p class="sub"><code>/api/v1/status</code> includes <code>warning</code>: <code>{"level", "message", "stale_note", "days_since_reading"}</code>. <code>level</code> is <code>none</code> (on or under pace), <code>watch</code> (over pace, but projected to finish under the limit), <code>warning</code> (projected to finish over the limit) or <code>urgent</code> (a large projected overage, already past the limit, or very few miles per day left). <code>message</code> says it in plain words and is empty when the level is <code>none</code>. <code>message</code> mentions the planned change when one is set (see <code>lease.planned_change</code> and <code>latest.projected_includes_plan</code>). <code>stale_note</code> is set when the last reading is more than 10 days old.</p>
+    </div>
+    <div class="card">
       <h2>POST /api/v1/readings</h2>
       <p class="sub">Save an odometer reading. <code>date</code> is optional (YYYY-MM-DD) and defaults to today on the server. One reading per date, a second one replaces the first. The odometer cannot go lower than an earlier reading.</p>
 <pre>curl -X POST https://YOUR-HOST/api/v1/readings \

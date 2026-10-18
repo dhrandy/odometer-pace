@@ -248,3 +248,33 @@ test('over and under pace have separate colors, neither red or green', async () 
     assert.ok(!(g > r + 60 && g > b + 60), c + ' looks green');
   }
 });
+
+test('the status carries a warning field for assistants', async () => {
+  const s = (await call('GET', '/api/status')).json;
+  assert.ok(['none', 'watch', 'warning', 'urgent'].includes(s.warning.level));
+  assert.strictEqual(typeof s.warning.message, 'string');
+  assert.ok('stale_note' in s.warning && 'days_since_reading' in s.warning);
+});
+
+test('the planned change is optional, all or nothing, and shows in the status', async () => {
+  const keep = (await call('GET', '/api/settings')).json.settings;
+  assert.strictEqual((await call('PUT', '/api/settings', Object.assign({}, keep, { planFrom: '2030-09-01' }))).status, 400);
+  assert.strictEqual((await call('PUT', '/api/settings', Object.assign({}, keep, { planFrom: '2030-09-01', planPerDay: -3 }))).status, 400);
+  assert.strictEqual((await call('PUT', '/api/settings', Object.assign({}, keep, { planFrom: '2030-09-01', planPerDay: 20 }))).status, 200);
+  const s = (await call('GET', '/api/status')).json;
+  assert.deepStrictEqual(s.lease.planned_change, { from: '2030-09-01', miles_per_day: 20 });
+  assert.strictEqual(s.latest.projected_includes_plan, true);
+  assert.strictEqual((await call('PUT', '/api/settings', Object.assign({}, keep, { planFrom: '', planPerDay: '' }))).status, 200);
+  const off = (await call('GET', '/api/status')).json;
+  assert.strictEqual(off.lease.planned_change, null);
+  assert.strictEqual(off.latest.projected_includes_plan, false);
+});
+
+test('every icon button has a label and a tap target of at least 44px', async () => {
+  const js = await (await fetch(BASE + '/app.js')).text();
+  const calls = js.match(/iconBtn\('[a-z]+', [^,]+,/g) || [];
+  assert.ok(calls.length >= 8);
+  for (const c of calls) assert.ok(!/iconBtn\('[a-z]+', ''/.test(c), c);
+  const css = await (await fetch(BASE + '/style.css')).text();
+  assert.match(css, /\.icon-btn \{[^}]*min-width: 44px; min-height: 44px/);
+});

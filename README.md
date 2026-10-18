@@ -145,6 +145,7 @@ What you can do:
    - latest.miles_per_day_to_stay_under: what I can drive per day from now on
    - latest.projected_end_odometer and latest.projected_vs_limit: where I end up at this pace
    - allowed_odometer_today: the on-pace odometer for today
+   - warning.level ("none", "watch", "warning", "urgent") and warning.message: if the level is not "none", tell me the message. warning.stale_note says the last reading is old; remind me to send a new one
    - lease.state: "not_started", "active" or "complete"
    If latest is null, there are no readings yet. If configured is false, the lease is not set up and I need to do that in the app.
 
@@ -166,6 +167,24 @@ Rules:
 - Before adding, tell me the number and date you are about to save if there is any doubt. After adding, tell me the new pace in one or two sentences: miles over or under pace, and how many miles I have left.
 - You cannot delete readings or change settings. If something needs fixing, tell me to do it in the app.
 ````
+
+## Icons
+
+Buttons for settings, log out, back, delete, revoke and jump to today are icons, drawn inline in the page (nothing is loaded from elsewhere). Each has a text label for screen readers and a hover tooltip, and is at least 44 px square. Actions that need a word, like Save reading, keep their text.
+
+## Warnings
+
+When you are over pace, a banner appears above the numbers with a plain sentence about what it means, for example "At this pace you finish about 600 mi over the limit. To get back on track, keep it to about 28 mi/day for the rest of the lease." There are three levels, each starting with a word so it never relies on color alone:
+
+- **Watch**: over pace, but the projection still ends under the limit.
+- **Warning**: projected to finish over the limit.
+- **Urgent**: projected overage above 10% of the lease, already past the limit, or the miles per day left to stay under are less than half the normal rate.
+
+Nothing shows when you are on or under pace. The level comes from your latest reading and the overall projection, so weekly readings work as well as daily ones. If the last reading is more than 10 days old, a quiet note says so. The same information is in `/api/v1/status` as a `warning` object, so an assistant can tell you. The app sends no emails or push notifications.
+
+## Planned change
+
+If your driving will change, for example one driver does a lot more until a certain month, the admin can add one planned change in Settings: "from this date, expect this many miles a day". It is optional and empty by default. Until that date the projection uses your pace so far. After it, the projection uses the planned pace. The projected-at-end card and the warnings use it, and both say so when it is active. `/api/v1/status` shows it as `lease.planned_change` and `latest.projected_includes_plan`. Clear both fields to remove it.
 
 ## How the allowance is counted
 
