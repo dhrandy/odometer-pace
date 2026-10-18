@@ -8,7 +8,7 @@ A small self-hosted page that tracks a car lease's mileage. It shows every day o
 - Odometer log: over or under pace, miles remaining, miles per day, projected odometer at lease end
 - Chart of your readings against the allowed line
 - One container, one small JSON file in a volume, no database server
-- Dark theme, works on phones
+- Dark theme with five accent colors (purple by default) and an OLED black option, set in Settings, works on phones
 - API keys so an AI or script can add readings and read your status
 - Your lease details are typed in the app on first run. Nothing about your lease is in the code.
 

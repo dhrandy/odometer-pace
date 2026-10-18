@@ -127,3 +127,14 @@ test('readings survive a restart', async () => {
   assert.strictEqual(s.status, 200);
   assert.strictEqual(s.json.readings.length, 2);
 });
+
+test('theme choice is saved on the server and validated', async () => {
+  assert.strictEqual((await call('GET', '/api/status')).json.ui.accent, 'purple');
+  assert.strictEqual((await call('PUT', '/api/ui', { accent: 'red' })).status, 400);
+  assert.strictEqual((await call('PUT', '/api/ui', { accent: 'blue', oled: true })).status, 200);
+  const ui = (await call('GET', '/api/status')).json.ui;
+  assert.strictEqual(ui.accent, 'blue');
+  assert.strictEqual(ui.oled, true);
+  // The agent API never carries theme data.
+  assert.strictEqual(JSON.stringify((await agent('GET', '/api/v1/status', undefined, 'lm_x')).json).includes('oled'), false);
+});

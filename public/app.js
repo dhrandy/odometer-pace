@@ -2,6 +2,22 @@
 (function () {
   var app = document.getElementById('app');
   var status = null;
+  var ui = { accent: 'purple', oled: false };
+
+  // Remember the theme on this device so the login page matches before the server answers.
+  try { ui = Object.assign(ui, JSON.parse(localStorage.getItem('lm_ui') || '{}')); } catch (e) { /* keep defaults */ }
+  applyUi(ui);
+
+  function applyUi(next) {
+    ui = { accent: next.accent || 'purple', oled: next.oled === true };
+    document.documentElement.setAttribute('data-accent', ui.accent);
+    document.documentElement.setAttribute('data-oled', String(ui.oled));
+    var meta = document.querySelector('meta[name=theme-color]');
+    if (meta) meta.setAttribute('content', ui.oled ? '#000000' : getComputedStyle(document.documentElement).getPropertyValue('--hero-b').trim());
+    try { localStorage.setItem('lm_ui', JSON.stringify(ui)); } catch (e) { /* private mode */ }
+  }
+
+  function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 
   function fmt(n) { return Number(n).toLocaleString('en-US'); }
   function fmt1(n) { return Number(n).toLocaleString('en-US', { maximumFractionDigits: 1 }); }
@@ -134,8 +150,40 @@
       ]));
       loadKeys(keysBox);
     }
+    if (!first) kids.splice(1, 0, appearanceCard());
     kids.push(el('p', {}, [el('button', { class: 'btn quiet', type: 'button', text: first ? 'Log out' : 'Back', onclick: first ? logout : boot })]));
     show(el('div', { class: 'wrap top' }, kids));
+  }
+
+  function appearanceCard() {
+    var box = el('div', { class: 'card' }, [
+      el('h2', { text: 'Appearance' }),
+      el('p', { class: 'sub', text: 'Pick an accent color. These are saved on the server, so every device matches.' })
+    ]);
+    var swatches = el('div', { class: 'swatches', role: 'group', 'aria-label': 'Accent color' });
+    var names = { purple: 'Purple', blue: 'Blue', cyan: 'Cyan', pink: 'Pink', orange: 'Orange' };
+    var oled = el('input', { type: 'checkbox' });
+    oled.checked = ui.oled;
+
+    function save(next) {
+      applyUi(next);
+      drawSwatches();
+      api('PUT', '/api/ui', next).catch(function () { /* the theme still applies on this device */ });
+    }
+    function drawSwatches() {
+      swatches.textContent = '';
+      Object.keys(names).forEach(function (k) {
+        swatches.appendChild(el('button', {
+          type: 'button', class: 'swatch s-' + k, title: names[k], 'aria-label': names[k], 'aria-pressed': String(ui.accent === k),
+          onclick: function () { save({ accent: k, oled: ui.oled }); }
+        }));
+      });
+    }
+    oled.addEventListener('change', function () { save({ accent: ui.accent, oled: oled.checked }); });
+    drawSwatches();
+    box.appendChild(swatches);
+    box.appendChild(el('label', { class: 'check' }, [oled, 'OLED black background']));
+    return box;
   }
 
   function loadKeys(box, shownKey) {
@@ -311,14 +359,14 @@
 
     [0, 0.5, 1].forEach(function (f) {
       var o = lo + (hi - lo) * f;
-      svg.appendChild(node('line', { x1: padL, x2: W - padR, y1: y(o), y2: y(o), stroke: '#3a3150' }));
-      var t = node('text', { x: padL - 6, y: y(o) + 4, 'text-anchor': 'end', 'font-size': 11, fill: '#a79fb8' });
+      svg.appendChild(node('line', { x1: padL, x2: W - padR, y1: y(o), y2: y(o), stroke: cssVar('--line') }));
+      var t = node('text', { x: padL - 6, y: y(o) + 4, 'text-anchor': 'end', 'font-size': 11, fill: cssVar('--muted') });
       t.textContent = fmt(Math.round(o));
       svg.appendChild(t);
     });
     for (var yr = 0; yr <= plan.years; yr++) {
       var d = yr === 0 ? 0 : plan.yearLens.slice(0, yr).reduce(function (a, b) { return a + b; }, 0);
-      var tl = node('text', { x: x(d), y: H - 8, 'text-anchor': yr === 0 ? 'start' : yr === plan.years ? 'end' : 'middle', 'font-size': 11, fill: '#a79fb8' });
+      var tl = node('text', { x: x(d), y: H - 8, 'text-anchor': yr === 0 ? 'start' : yr === plan.years ? 'end' : 'middle', 'font-size': 11, fill: cssVar('--muted') });
       tl.textContent = yr === 0 ? 'Start' : yr === plan.years ? 'End' : 'Year ' + yr;
       svg.appendChild(tl);
     }
@@ -326,13 +374,13 @@
     var pts = [];
     for (var i = -1; i < plan.dayCount; i += 15) pts.push(x(i + 1) + ',' + y(plan.startOdometer + Lease.allowedThrough(plan, i)));
     pts.push(x(plan.dayCount) + ',' + y(plan.limit));
-    svg.appendChild(node('polyline', { points: pts.join(' '), fill: 'none', stroke: '#7c6aa8', 'stroke-width': 3 }));
+    svg.appendChild(node('polyline', { points: pts.join(' '), fill: 'none', stroke: cssVar('--accent-mid'), 'stroke-opacity': 0.55, 'stroke-width': 3 }));
 
     var rp = [x(0) + ',' + y(plan.startOdometer)];
     s.readings.forEach(function (r) { rp.push(x(Lease.dayIndex(plan, r.date) + 1) + ',' + y(r.odometer)); });
-    svg.appendChild(node('polyline', { points: rp.join(' '), fill: 'none', stroke: '#a78bfa', 'stroke-width': 3, 'stroke-linejoin': 'round' }));
+    svg.appendChild(node('polyline', { points: rp.join(' '), fill: 'none', stroke: cssVar('--accent'), 'stroke-width': 3, 'stroke-linejoin': 'round' }));
     s.readings.forEach(function (r) {
-      svg.appendChild(node('circle', { cx: x(Lease.dayIndex(plan, r.date) + 1), cy: y(r.odometer), r: 4, fill: '#c4b5fd' }));
+      svg.appendChild(node('circle', { cx: x(Lease.dayIndex(plan, r.date) + 1), cy: y(r.odometer), r: 4, fill: cssVar('--accent-mid') }));
     });
     if (latest && latest.projected_end_odometer && s.lease.state === 'active') {
       var last = s.readings[s.readings.length - 1];
@@ -425,6 +473,7 @@
       if (!sess.loggedIn) return renderPassword(false);
       return api('GET', '/api/status').then(function (st) {
         status = st;
+        if (st.ui) applyUi(st.ui);
         if (!st.configured) renderSettings(true);
         else renderMain();
       });

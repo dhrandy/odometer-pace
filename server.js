@@ -18,7 +18,7 @@ const DATA_FILE = path.join(DATA_DIR, 'lease-miles.json');
 // ---------- storage ----------
 
 function emptyData() {
-  return { settings: null, readings: [], tokens: [], auth: null, sessions: [] };
+  return { settings: null, readings: [], tokens: [], auth: null, sessions: [], ui: { accent: 'purple', oled: false } };
 }
 
 function loadData() {
@@ -205,6 +205,13 @@ function statusBody() {
   return body;
 }
 
+const ACCENTS = ['purple', 'blue', 'cyan', 'pink', 'orange'];
+
+function uiBody() {
+  const ui = data.ui || {};
+  return { accent: ACCENTS.includes(ui.accent) ? ui.accent : 'purple', oled: ui.oled === true, accents: ACCENTS };
+}
+
 function addReading(date, odometer, source) {
   const plan = Lease.makePlan(data.settings);
   if (!plan) return 'Lease settings are not set up yet.';
@@ -298,7 +305,16 @@ async function handleApi(req, res, url) {
     return sendJson(res, 415, { error: 'Send JSON.' });
   }
 
-  if (p === '/api/status' && method === 'GET') return sendJson(res, 200, statusBody());
+  if (p === '/api/status' && method === 'GET') return sendJson(res, 200, Object.assign(statusBody(), { ui: uiBody() }));
+
+  if (p === '/api/ui' && method === 'PUT') {
+    let b;
+    try { b = await readBody(req); } catch (e) { return sendJson(res, 400, { error: 'Bad request.' }); }
+    if (!ACCENTS.includes(b.accent)) return sendJson(res, 400, { error: 'Unknown color.' });
+    data.ui = { accent: b.accent, oled: b.oled === true };
+    saveData();
+    return sendJson(res, 200, uiBody());
+  }
 
   if (p === '/api/settings') {
     if (method === 'GET') return sendJson(res, 200, { settings: data.settings });
