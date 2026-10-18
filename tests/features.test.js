@@ -232,3 +232,12 @@ test('the page has the slim header, pace status, merged glance card, month and y
   assert.match(css, /\.stats\.tight/);
   assert.match(css, /\.month\.big \.day[^}]*min-height: 44px/);
 });
+
+test('delete lives on the History page only, and empty weeks are left out of the month grid', async () => {
+  const js = await (await fetch(BASE + '/app.js')).text();
+  const card = js.slice(js.indexOf("class: 'card day-detail'"), js.indexOf("class: 'card day-detail'") + 900);
+  assert.ok(!card.includes("iconBtn('trash'"), 'no trash in the day card');
+  const hist = js.slice(js.indexOf('function renderHistory'));
+  assert.ok(hist.includes("iconBtn('trash'") && hist.includes("me.role === 'admin'"));
+  assert.ok(js.includes('cells.splice(0, 7)'));
+});

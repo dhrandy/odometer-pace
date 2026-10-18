@@ -475,7 +475,13 @@
     var msg = el('p', { class: 'err', role: 'status' });
     api('GET', '/api/history').then(function (r) {
       if (!r.history.length) list.appendChild(el('li', {}, ['Nothing has been entered yet.']));
+      var seen = {};
+      var current = {};
+      (status.readings || []).forEach(function (rd) { current[rd.date] = rd.odometer; });
       r.history.forEach(function (h) {
+        // Admin only: the newest entry for a date that is still the current reading can be deleted.
+        var canDelete = me.role === 'admin' && !seen[h.date] && !h.deleted && current[h.date] === h.odometer;
+        seen[h.date] = true;
         var when = h.at ? new Date(h.at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'earlier';
         var what = h.deleted ? 'Deleted ' + fmt(h.odometer) + ' mi' : fmt(h.odometer) + ' mi';
         var more = ' for ' + longDate(h.date) + (!h.deleted && h.previous !== null && h.previous !== undefined ? ', replaced ' + fmt(h.previous) : '');
@@ -485,7 +491,10 @@
         list.appendChild(el('li', {}, [el('div', {}, [
           el('div', {}, [el('strong', { text: what }), more]),
           el('div', { class: 'src hist-meta' }, [when + ' \u00b7 '].concat(who))
-        ])]));
+        ]), canDelete ? iconBtn('trash', 'Delete reading from ' + longDate(h.date), function () {
+          if (!confirm('Delete the reading from ' + longDate(h.date) + '?')) return;
+          api('DELETE', '/api/readings/' + h.date).then(function (st) { status = st; renderHistory(); }).catch(function (x) { msg.textContent = x.message; });
+        }, 'danger') : null]));
       });
     }).catch(function (x) { msg.textContent = x.message; });
     show(el('div', { class: 'wrap top' }, [
@@ -821,12 +830,13 @@
     function grid(c, lo, hi, pick, mini) {
       var g = el('div', { class: 'grid' });
       if (!mini) ['S', 'M', 'T', 'W', 'T', 'F', 'S'].forEach(function (d) { g.appendChild(el('div', { class: 'dow', text: d })); });
+      var cells = [];
       var firstDow = new Date(Date.UTC(c.y, c.m, 1)).getUTCDay();
-      for (var b = 0; b < firstDow; b++) g.appendChild(el('div', { class: 'day blank' }));
+      for (var b = 0; b < firstDow; b++) cells.push(el('div', { class: 'day blank' }));
       var dim = new Date(Date.UTC(c.y, c.m + 1, 0)).getUTCDate();
       for (var d = 1; d <= dim; d++) {
         var key = keyOf(c.y, c.m, d), n = Lease.dayNum(key);
-        if (n < lo || n > hi) { g.appendChild(el('div', { class: 'day blank' })); continue; }
+        if (n < lo || n > hi) { cells.push(el('div', { class: 'day blank' })); continue; }
         var idx = n - startN;
         var cls = 'day';
         if (idx < todayIdx) cls += ' past';
@@ -834,8 +844,15 @@
         if (readingByDate[key]) cls += ' reading';
         if (!mini && key === selected) cls += ' selected';
         var cell = el(mini ? 'div' : 'button', mini ? { class: cls } : { class: cls, type: 'button', 'aria-label': longDate(key), 'aria-pressed': String(key === selected), onclick: (function (k) { return function () { pick(k); }; })(key) }, mini ? [] : [el('span', { class: 'n', text: String(d) })]);
-        g.appendChild(cell);
+        cells.push(cell);
       }
+      // A week with no lease days in it is left out, so the first and last month have no empty rows.
+      if (!mini) {
+        var isBlank = function (x) { return x.className === 'day blank'; };
+        while (cells.length >= 7 && cells.slice(0, 7).every(isBlank)) cells.splice(0, 7);
+        while (cells.length >= 7 && cells.slice(-7).every(isBlank)) cells.splice(-7, 7);
+      }
+      cells.forEach(function (x) { g.appendChild(x); });
       return g;
     }
 
@@ -872,8 +889,7 @@
       var allowed = Lease.allowedThrough(plan, idx);
       var r = readingByDate[key];
       wrap.appendChild(el('div', { class: 'card day-detail' }, [
-        el('div', { class: 'card-head' }, [el('p', { class: 'label', text: longDate(key) + (idx === todayIdx ? ' \u00b7 today' : '') }),
-          r && me.role === 'admin' ? iconBtn('trash', 'Delete reading from ' + longDate(key), function () { api('DELETE', '/api/readings/' + key).then(refresh); }, 'danger') : null]),
+        el('p', { class: 'label', text: longDate(key) + (idx === todayIdx ? ' \u00b7 today' : '') }),
         el('p', { class: 'dd-line' }, [el('strong', { text: fmt(plan.startOdometer + allowed) }), ' on-pace odometer at the end of this day']),
         el('p', { class: 'note dd-note', text: fmt(allowed) + ' miles allowed so far. ' + (r ? 'Your reading: ' + fmt(r.odometer) + ' mi.' : 'No reading on this day.') })
       ]));
