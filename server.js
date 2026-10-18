@@ -371,6 +371,8 @@ function addReading(date, odometer, source) {
   if (err) return { error: err };
   const old = data.readings.find((r) => r.date === date);
   const previous = old ? { date: old.date, odometer: old.odometer } : null;
+  // The same value for the same date is not a change: no new row, no history entry.
+  if (old && old.odometer === odometer) return { previous: previous, unchanged: true };
   const at = new Date().toISOString();
   data.readings = others.concat([{ date: date, odometer: odometer, source: source, saved: at }]);
   logHistory(Object.assign({ at: at, date: date, odometer: odometer, previous: previous ? previous.odometer : null, deleted: false }, whoFromSource(source)));
@@ -429,7 +431,7 @@ async function handleApi(req, res, url) {
       const result = addReading(date, odometer, 'api:' + token.name + (token.ownerName ? ' (' + token.ownerName + ')' : ''));
       if (result.error) return sendJson(res, 400, { error: result.error });
       // No prompt for assistants: a same-date save replaces, and the reply says so.
-      return sendJson(res, 200, { saved: { date: date, odometer: odometer }, replaced: !!result.previous, previous: result.previous ? { odometer: result.previous.odometer } : null, status: statusBody() });
+      return sendJson(res, 200, { saved: { date: date, odometer: odometer }, unchanged: !!result.unchanged, replaced: !!result.previous && !result.unchanged, previous: result.previous ? { odometer: result.previous.odometer } : null, status: statusBody() });
     }
     return sendJson(res, 404, { error: 'Not found.' });
   }
@@ -568,7 +570,7 @@ async function handleApi(req, res, url) {
     const date = String(b.date || todayKey());
     const result = addReading(date, odometer, 'web:' + me.username);
     if (result.error) return sendJson(res, 400, { error: result.error });
-    return sendJson(res, 200, statusBody());
+    return sendJson(res, 200, Object.assign(statusBody(), { unchanged: !!result.unchanged }));
   }
 
   const del = /^\/api\/readings\/(\d{4}-\d{2}-\d{2})$/.exec(p);

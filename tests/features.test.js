@@ -190,3 +190,24 @@ test('backup and CSV carry the history and restore brings it back', async () => 
   const seeded = (await call('GET', '/api/history')).json.history;
   assert.strictEqual(seeded.length, old.readings.length);
 });
+
+test('the same value for the same date changes nothing and adds no history', async () => {
+  const d = day(-4);
+  await call('POST', '/api/readings', { date: d, odometer: 2500 });
+  const n = (await call('GET', '/api/history')).json.history.length;
+  const web = await call('POST', '/api/readings', { date: d, odometer: 2500 });
+  assert.strictEqual(web.status, 200);
+  assert.strictEqual(web.json.unchanged, true);
+  const api = await call('POST', '/api/v1/readings', { date: d, odometer: 2500 }, { Authorization: 'Bearer ' + key, Cookie: '' });
+  assert.strictEqual(api.status, 200);
+  assert.strictEqual(api.json.unchanged, true);
+  assert.strictEqual(api.json.replaced, false);
+  assert.strictEqual((await call('GET', '/api/history')).json.history.length, n);
+  // The same value on a different date is a normal new entry.
+  await call('POST', '/api/readings', { date: day(-3), odometer: 2500 });
+  assert.strictEqual((await call('GET', '/api/history')).json.history.length, n + 1);
+  // A different value on the same date still replaces and logs.
+  const r = await call('POST', '/api/v1/readings', { date: d, odometer: 2400 }, { Authorization: 'Bearer ' + key, Cookie: '' });
+  assert.strictEqual(r.json.replaced, true);
+  assert.strictEqual(r.json.unchanged, false);
+});

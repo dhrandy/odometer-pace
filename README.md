@@ -142,7 +142,7 @@ curl -X POST https://your-host/api/v1/readings \
   -d '{"odometer": 1150, "date": "2030-04-05"}'
 ```
 
-`date` is optional and defaults to today. One reading per date, and the odometer cannot go lower than an earlier reading. A second reading for a date that already has one replaces it, and the reply says so with `"replaced": true` and the old value in `previous`. In the web app, saving over an existing date asks you to confirm first.
+`date` is optional and defaults to today. One reading per date, and the odometer cannot go lower than an earlier reading. A second reading for a date that already has one replaces it (the same value again changes nothing and adds no history entry), and the reply says so with `"replaced": true` and the old value in `previous`. In the web app, saving over an existing date asks you to confirm first.
 
 ### Instructions to give your AI assistant
 
@@ -181,7 +181,7 @@ What you can do:
    Body: {"odometer": 12345}
    Or with a date: {"odometer": 12345, "date": "2030-04-05"}
    The date is optional (YYYY-MM-DD) and defaults to today. Only one reading is kept per date, so a second one for the same date replaces the first.
-   Success is HTTP 200 with {"saved": {...}, "replaced": true or false, "previous": {"odometer": N} or null, "status": {...}}, and the status is the same shape as GET /api/v1/status. If replaced is true, you overwrote an earlier reading for that date: tell me the old and new numbers.
+   Success is HTTP 200 with {"saved": {...}, "unchanged": true or false, "replaced": true or false, "previous": {"odometer": N} or null, "status": {...}}, and the status is the same shape as GET /api/v1/status. If replaced is true, you overwrote an earlier reading for that date: tell me the old and new numbers.
    A rejected reading is HTTP 400 with {"error": "plain reason"}, for example if the odometer is lower than an earlier reading or the date is before the lease starts. Tell me the reason. Do not retry with a changed number to get around it.
    HTTP 401 means the key is wrong or revoked. HTTP 429 means too many failed attempts, so wait and tell me.
 

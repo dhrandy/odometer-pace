@@ -278,7 +278,7 @@
       if (mode !== 'proxy') kids.splice(3, 0, usersCard());
       if (mode !== 'proxy') kids.splice(4, 0, passwordCard());
     }
-    kids.push(el('p', {}, [first ? iconBtn('logout', 'Log out', logout, 'quiet') : iconBtn('back', 'Back', boot, 'quiet')]));
+    kids.unshift(el('p', {}, [first ? iconBtn('logout', 'Log out', logout, 'quiet') : iconBtn('back', 'Back', boot, 'quiet')]));
     show(el('div', { class: 'wrap top' }, kids));
   }
 
@@ -286,6 +286,7 @@
   function renderAccount() {
     var keysBox = el('div');
     var kids = [
+      el('p', {}, [iconBtn('back', 'Back', boot, 'quiet')]),
       el('div', { class: 'card' }, [
         el('h2', { text: 'Signed in as ' + me.username }),
         el('p', { class: 'sub', text: 'You can add odometer readings. The admin manages the lease settings and logins.' })
@@ -297,8 +298,7 @@
         el('p', { class: 'sub', text: 'Let your AI or a script add odometer readings and read the status. A key can only do that, nothing else. The key is shown once, so copy it right away.' }),
         keysBox,
         el('p', { class: 'note' }, [el('a', { href: '/api/docs', text: 'API docs' })])
-      ]),
-      el('p', {}, [iconBtn('back', 'Back', boot, 'quiet')])
+      ])
     ];
     loadKeys(keysBox);
     show(el('div', { class: 'wrap top' }, kids));
@@ -485,8 +485,8 @@
       });
     }).catch(function (x) { msg.textContent = x.message; });
     show(el('div', { class: 'wrap top' }, [
-      el('div', { class: 'card' }, [el('h2', { text: 'History' }), el('p', { class: 'sub', text: 'Every reading that was entered, newest first.' }), list, msg]),
-      el('p', {}, [iconBtn('back', 'Back', boot, 'quiet')])
+      el('p', {}, [iconBtn('back', 'Back', boot, 'quiet')]),
+      el('div', { class: 'card' }, [el('h2', { text: 'History' }), el('p', { class: 'sub', text: 'Every reading that was entered, newest first.' }), list, msg])
     ]));
   }
 
@@ -625,7 +625,8 @@
       err.textContent = '';
       var same = (s.readings || []).filter(function (r) { return r.date === date.value; })[0];
       var next = Number(String(odo.value).replace(/,/g, ''));
-      if (same && same.odometer !== next) {
+      if (same && same.odometer === next) { err.textContent = longDate(date.value) + ' already has ' + fmt(next) + '. No change.'; return; }
+      if (same) {
         confirmText.textContent = longDate(date.value) + ' already has ' + fmt(same.odometer) + '. Replace with ' + fmt(next) + '?';
         confirmBox.hidden = false;
         return;
