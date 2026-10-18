@@ -604,14 +604,14 @@
       var last = s.readings[s.readings.length - 1];
       svg.appendChild(node('line', {
         x1: x(Lease.dayIndex(plan, last.date) + 1), y1: y(last.odometer), x2: x(plan.dayCount), y2: y(latest.projected_end_odometer),
-        stroke: '#fbbf24', 'stroke-width': 2.5, 'stroke-dasharray': '6 5'
+        stroke: cssVar(latest.projected_vs_limit > 0 ? '--over' : '--under'), 'stroke-width': 2.5, 'stroke-dasharray': '6 5'
       }));
     }
 
     var legend = el('div', { class: 'legend' }, [
       el('span', {}, [el('i', { class: 'allowed' }), 'Allowed']),
       el('span', {}, [el('i', { class: 'readings' }), 'Your readings']),
-      el('span', {}, [el('i', { class: 'projected' }), 'Projected'])
+      el('span', {}, [el('i', { class: 'projected' + (latest && latest.projected_vs_limit > 0 ? ' over' : '') }), 'Projected'])
     ]);
     var box = el('div', { class: 'chart' });
     box.appendChild(svg);
@@ -634,7 +634,7 @@
         if (todayCell) todayCell.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }, 'quiet')
     ]));
-    box.appendChild(el('p', { class: 'note', text: 'Each box shows the day and the total miles you may have driven by the end of that day. Crossed-off days are behind you. An amber dot marks a day with a reading.' }));
+    box.appendChild(el('p', { class: 'note', text: 'Each box shows the day and the total miles you may have driven by the end of that day. Crossed-off days are behind you. A dot marks a day with a reading.' }));
 
     var dayNo = 0;
     for (var y = 0; y < plan.years; y++) {

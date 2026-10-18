@@ -135,7 +135,7 @@ button, input, select { font: inherit; }
 .day.today { background: var(--accent-strong); color: #fff; box-shadow: 0 0 0 2px #fff; z-index: 1; }
 .day.today .m { opacity: 1; }
 .day.reading::before {
-  content: ""; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: #fbbf24;
+  content: ""; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-mid);
 }
 
 .center { max-width: 380px; margin: 18vh auto 0; padding: 0 16px; }
@@ -155,7 +155,8 @@ button, input, select { font: inherit; }
 .wrap.top { margin-top: 24px; }
 .legend i.allowed { background: var(--accent-mid); opacity: .55; }
 .legend i.readings { background: var(--accent); }
-.legend i.projected { background: #fbbf24; }
+.legend i.projected { background: var(--under); }
+.legend i.projected.over { background: var(--over); }
 .btn-link { display: inline-block; text-decoration: none; }
 a { color: var(--accent-mid); }
 pre, code { font-size: .85rem; }
