@@ -475,13 +475,7 @@
     var msg = el('p', { class: 'err', role: 'status' });
     api('GET', '/api/history').then(function (r) {
       if (!r.history.length) list.appendChild(el('li', {}, ['Nothing has been entered yet.']));
-      var seen = {};
-      var current = {};
-      (status.readings || []).forEach(function (rd) { current[rd.date] = rd.odometer; });
       r.history.forEach(function (h) {
-        // Admin only: the newest entry for a date that is still the current reading can be deleted.
-        var canDelete = me.role === 'admin' && !seen[h.date] && !h.deleted && current[h.date] === h.odometer;
-        seen[h.date] = true;
         var when = h.at ? new Date(h.at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'earlier';
         var what = h.deleted ? 'Deleted ' + fmt(h.odometer) + ' mi' : fmt(h.odometer) + ' mi';
         var more = ' for ' + longDate(h.date) + (!h.deleted && h.previous !== null && h.previous !== undefined ? ', replaced ' + fmt(h.previous) : '');
@@ -491,10 +485,7 @@
         list.appendChild(el('li', {}, [el('div', {}, [
           el('div', {}, [el('strong', { text: what }), more]),
           el('div', { class: 'src hist-meta' }, [when + ' \u00b7 '].concat(who))
-        ]), canDelete ? iconBtn('trash', 'Delete reading from ' + longDate(h.date), function () {
-          if (!confirm('Delete the reading from ' + longDate(h.date) + '?')) return;
-          api('DELETE', '/api/readings/' + h.date).then(function (st) { status = st; renderHistory(); }).catch(function (x) { msg.textContent = x.message; });
-        }, 'danger') : null]));
+        ])]));
       });
     }).catch(function (x) { msg.textContent = x.message; });
     show(el('div', { class: 'wrap top' }, [
@@ -889,7 +880,8 @@
       var allowed = Lease.allowedThrough(plan, idx);
       var r = readingByDate[key];
       wrap.appendChild(el('div', { class: 'card day-detail' }, [
-        el('p', { class: 'label', text: longDate(key) + (idx === todayIdx ? ' \u00b7 today' : '') }),
+        el('div', { class: 'card-head' }, [el('p', { class: 'label', text: longDate(key) + (idx === todayIdx ? ' \u00b7 today' : '') }),
+          r && me.role === 'admin' ? iconBtn('trash', 'Delete reading from ' + longDate(key), function () { api('DELETE', '/api/readings/' + key).then(refresh); }, 'danger') : null]),
         el('p', { class: 'dd-line' }, [el('strong', { text: fmt(plan.startOdometer + allowed) }), ' on-pace odometer at the end of this day']),
         el('p', { class: 'note dd-note', text: fmt(allowed) + ' miles allowed so far. ' + (r ? 'Your reading: ' + fmt(r.odometer) + ' mi.' : 'No reading on this day.') })
       ]));
