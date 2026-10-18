@@ -101,11 +101,11 @@
     return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
-  // The logo: a road narrowing to the horizon with a blue dot. White and sky blue only.
+  // The logo: a road narrowing to the horizon with a dot in the accent color.
   var TAGLINE = 'Every mile, on schedule.';
   function logoMark() {
     var n = el('span', { class: 'logo-mark', 'aria-hidden': 'true' });
-    n.innerHTML = '<svg viewBox="0 0 48 48" width="48" height="48"><rect width="48" height="48" rx="12" fill="rgba(255,255,255,.14)"/><path d="M17 40L21.5 8h5L31 40z" fill="rgba(255,255,255,.28)"/><path d="M24 36v-5M24 26v-5M24 16v-4" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><circle cx="35" cy="13" r="4" fill="#56b4e9"/></svg>';
+    n.innerHTML = '<svg viewBox="0 0 48 48" width="48" height="48"><rect width="48" height="48" rx="12" fill="rgba(255,255,255,.14)"/><path d="M17 40L21.5 8h5L31 40z" fill="rgba(255,255,255,.28)"/><path d="M24 36v-5M24 26v-5M24 16v-4" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><circle class="dot" cx="35" cy="13" r="4"/></svg>';
     return n;
   }
   function brandBlock() {

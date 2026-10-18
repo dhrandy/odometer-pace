@@ -213,7 +213,7 @@ Settings has an **Optional features** card. Everything in it is off until the ad
 
 - **Overage cost**: set the dollars per mile your lease charges over the limit. Shows the projected fee at turn-in next to the projection.
 - **Trip what-if**: type the miles of a planned trip to see how it changes the projected end odometer, the fee and the miles per day to stay under. The trip is added on top of what you already drive.
-- **Glance view**: a card at the top with the miles you can drive this week and by the end of today and still be on pace, colored amber when over and blue when on track. It also turns on `GET /api/v1/glance`, a small read-only endpoint for widgets.
+- **Glance view**: a card at the top with the miles you can drive this week and by the end of today and still be on pace, amber when over and your accent color when on track. It also turns on `GET /api/v1/glance`, a small read-only endpoint for widgets.
 - **Export and backup**: download readings as CSV, or a JSON backup of lease settings and readings. Restore from a backup file in the same card. Backups never contain logins or API keys.
 
 ### Home Assistant sensor
