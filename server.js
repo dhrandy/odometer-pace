@@ -257,15 +257,18 @@ function uiBody(me) {
   return { accent: ACCENTS.includes(ui.accent) ? ui.accent : 'purple', oled: ui.oled === true, accents: ACCENTS };
 }
 
+// Returns { error } or { previous }, where previous is the reading this one replaced (or null).
 function addReading(date, odometer, source) {
   const plan = Lease.makePlan(data.settings);
-  if (!plan) return 'Lease settings are not set up yet.';
+  if (!plan) return { error: 'Lease settings are not set up yet.' };
   const others = data.readings.filter((r) => r.date !== date);
   const err = Lease.checkReading(plan, others, date, odometer);
-  if (err) return err;
+  if (err) return { error: err };
+  const old = data.readings.find((r) => r.date === date);
+  const previous = old ? { date: old.date, odometer: old.odometer } : null;
   data.readings = others.concat([{ date: date, odometer: odometer, source: source, saved: new Date().toISOString() }]);
   saveData();
-  return '';
+  return { previous: previous };
 }
 
 function cleanSettings(b) {
@@ -310,9 +313,10 @@ async function handleApi(req, res, url) {
       try { b = await readBody(req); } catch (e) { return sendJson(res, 400, { error: 'Send a JSON body like {"odometer": 1234}.' }); }
       const odometer = Number(String(b.odometer).replace(/,/g, ''));
       const date = b.date ? String(b.date) : todayKey();
-      const err = addReading(date, odometer, 'api:' + token.name + (token.ownerName ? ' (' + token.ownerName + ')' : ''));
-      if (err) return sendJson(res, 400, { error: err });
-      return sendJson(res, 200, { saved: { date: date, odometer: odometer }, status: statusBody() });
+      const result = addReading(date, odometer, 'api:' + token.name + (token.ownerName ? ' (' + token.ownerName + ')' : ''));
+      if (result.error) return sendJson(res, 400, { error: result.error });
+      // No prompt for assistants: a same-date save replaces, and the reply says so.
+      return sendJson(res, 200, { saved: { date: date, odometer: odometer }, replaced: !!result.previous, previous: result.previous ? { odometer: result.previous.odometer } : null, status: statusBody() });
     }
     return sendJson(res, 404, { error: 'Not found.' });
   }
@@ -400,8 +404,8 @@ async function handleApi(req, res, url) {
     try { b = await readBody(req); } catch (e) { return sendJson(res, 400, { error: 'Bad request.' }); }
     const odometer = Number(String(b.odometer).replace(/,/g, ''));
     const date = String(b.date || todayKey());
-    const err = addReading(date, odometer, 'web:' + me.username);
-    if (err) return sendJson(res, 400, { error: err });
+    const result = addReading(date, odometer, 'web:' + me.username);
+    if (result.error) return sendJson(res, 400, { error: result.error });
     return sendJson(res, 200, statusBody());
   }
 

@@ -211,3 +211,6 @@ html[data-oled="true"] .day.past { background: #08080a; }
 .add-btn { background: var(--accent-strong); color: #fff; }
 .add-btn:hover { background: var(--accent-strong-hover); }
 [hidden] { display: none !important; }
+.confirm { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--over-soft); border-left: 4px solid var(--over); }
+.confirm .row-btns { margin-top: 10px; }
+.confirm .row-btns .btn { padding: 0 18px; height: 44px; }

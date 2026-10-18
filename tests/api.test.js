@@ -284,3 +284,22 @@ test('the entry form is behind an Add reading button', async () => {
   assert.ok(js.includes("'Add reading'") && js.includes("'aria-expanded'"));
   assert.ok(js.includes('odo.focus()'));
 });
+
+test('an API save over an existing date says it replaced the old reading', async () => {
+  const key = (await call('POST', '/api/tokens', { name: 'Replace test' })).json.key;
+  const first = (await agent('POST', '/api/v1/readings', { odometer: 4000, date: '2030-05-01' }, key)).json;
+  assert.strictEqual(first.replaced, false);
+  assert.strictEqual(first.previous, null);
+  const again = (await agent('POST', '/api/v1/readings', { odometer: 4100, date: '2030-05-01' }, key)).json;
+  assert.strictEqual(again.replaced, true);
+  assert.deepStrictEqual(again.previous, { odometer: 4000 });
+  assert.strictEqual(again.saved.odometer, 4100);
+  const web = await call('POST', '/api/readings', { odometer: 4100, date: '2030-05-01' });
+  assert.strictEqual(web.status, 200);
+  await call('DELETE', '/api/readings/2030-05-01', {});
+});
+
+test('the web form asks before replacing a same-date reading', async () => {
+  const js = await (await fetch(BASE + '/app.js')).text();
+  assert.ok(js.includes("' already has '") && js.includes("text: 'Replace'") && js.includes("text: 'Cancel'"));
+});

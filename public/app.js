@@ -441,12 +441,34 @@
     var date = el('input', { type: 'date', value: s.today, 'aria-label': 'Date of reading' });
     var err = el('p', { class: 'err', role: 'status' });
 
-    function save(e) {
-      e.preventDefault();
-      err.textContent = '';
+    function post() {
+      confirmBox.hidden = true;
       api('POST', '/api/readings', { odometer: odo.value, date: date.value })
         .then(refresh)
         .catch(function (x) { err.textContent = x.message; });
+    }
+
+    // A date that already has a reading asks before it replaces it.
+    var confirmText = el('span');
+    var confirmBox = el('div', { class: 'confirm', role: 'alert', hidden: '' }, [
+      confirmText,
+      el('div', { class: 'row-btns' }, [
+        el('button', { class: 'btn', type: 'button', text: 'Replace', onclick: post }),
+        el('button', { class: 'btn quiet', type: 'button', text: 'Cancel', onclick: function () { confirmBox.hidden = true; } })
+      ])
+    ]);
+
+    function save(e) {
+      e.preventDefault();
+      err.textContent = '';
+      var same = (s.readings || []).filter(function (r) { return r.date === date.value; })[0];
+      var next = Number(String(odo.value).replace(/,/g, ''));
+      if (same && same.odometer !== next) {
+        confirmText.textContent = longDate(date.value) + ' already has ' + fmt(same.odometer) + '. Replace with ' + fmt(next) + '?';
+        confirmBox.hidden = false;
+        return;
+      }
+      post();
     }
 
     // The entry form stays folded away until the plus button is tapped. With no readings yet it starts open.
@@ -463,6 +485,7 @@
       form.hidden = !open;
       intro.hidden = !open;
       err.hidden = !open;
+      if (!open) confirmBox.hidden = true;
       var label = open ? 'Close' : 'Add reading';
       toggle.textContent = '';
       toggle.appendChild(icon(open ? 'close' : 'plus'));
@@ -477,6 +500,7 @@
       el('div', { class: 'card-head' }, [el('h2', { text: 'Your odometer' }), toggle]),
       intro,
       form,
+      confirmBox,
       err
     ]);
 

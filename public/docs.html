@@ -45,7 +45,7 @@
 <pre>curl -X POST https://YOUR-HOST/api/v1/readings \
   -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
   -d '{"odometer": 1150, "date": "2030-04-05"}'</pre>
-      <p class="note">Returns <code>{"saved": {...}, "status": {...}}</code> on success, or <code>{"error": "..."}</code> with HTTP 400 and a plain reason.</p>
+      <p class="note">Returns <code>{"saved": {...}, "replaced": false, "previous": null, "status": {...}}</code> on success. When the date already had a reading, <code>replaced</code> is <code>true</code> and <code>previous</code> holds the old odometer, because the API replaces without asking, or <code>{"error": "..."}</code> with HTTP 400 and a plain reason.</p>
     </div>
     <div class="card">
       <h2>GET /api/v1/readings</h2>
