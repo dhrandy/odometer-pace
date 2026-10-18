@@ -76,7 +76,9 @@ function safeEqual(a, b) {
 
 function clientIp(req) {
   if (TRUST_PROXY) {
-    const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    // The last entry is the one our own proxy added. Earlier entries can be forged by the client.
+    const parts = String(req.headers['x-forwarded-for'] || '').split(',');
+    const fwd = parts[parts.length - 1].trim();
     if (fwd) return fwd;
   }
   return req.socket.remoteAddress || 'unknown';
@@ -88,6 +90,10 @@ function tooManyFailures(ip) {
   const f = failures.get(ip);
   return !!f && f.until > Date.now() && f.count >= 10;
 }
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, f] of failures) if (f.until <= now) failures.delete(ip);
+}, 10 * 60 * 1000).unref();
 function noteFailure(ip) {
   const f = failures.get(ip);
   if (!f || f.until <= Date.now()) failures.set(ip, { count: 1, until: Date.now() + 15 * 60 * 1000 });
@@ -358,7 +364,7 @@ async function handleApi(req, res, url) {
 
   if (p === '/api/logout' && method === 'POST') {
     endSession(req);
-    return sendJson(res, 200, { ok: true }, { 'Set-Cookie': 'op_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0' });
+    return sendJson(res, 200, { ok: true }, { 'Set-Cookie': 'op_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0' + (COOKIE_SECURE ? '; Secure' : '') });
   }
 
   const me = currentUser(req);
@@ -427,6 +433,9 @@ async function handleApi(req, res, url) {
     if (String(b.password || '').length < 8) return sendJson(res, 400, { error: 'Use at least 8 characters.' });
     user.salt = crypto.randomBytes(16).toString('hex');
     user.hash = hashPassword(String(b.password), user.salt);
+    // Sign out this user's other devices; keep the one that just changed the password.
+    const keep = sha256(readCookie(req, 'op_session'));
+    data.sessions = data.sessions.filter((x) => x.userId !== user.id || x.hash === keep);
     saveData();
     return sendJson(res, 200, { ok: true });
   }
