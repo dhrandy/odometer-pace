@@ -7,20 +7,20 @@
 [![Tests](https://github.com/dhrandy/odometer-pace/actions/workflows/test.yml/badge.svg)](https://github.com/dhrandy/odometer-pace/actions/workflows/test.yml)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
-A small self-hosted page that tracks a car lease's mileage. It shows every day of the lease as a calendar, crosses off the days that have passed, and compares your odometer with where it should be. Readings are saved on your server, so your phone and your computer always match.
+A small self-hosted page that tracks a car lease's mileage. It shows every day of the lease in a month calendar (with a year view), and compares your odometer with where it should be. Readings are saved on your server, so your phone and your computer always match.
 
 <p>
   <img src="docs/desktop-stats.png" alt="Desktop view with the pace warning, stats and projection chart, using invented demo data" width="720">
 </p>
 <p>
-  <img src="docs/desktop-calendar.png" alt="Desktop view of the day-by-day calendar with today highlighted, using invented demo data" width="720">
+  <img src="docs/desktop-calendar.png" alt="Desktop view of the month calendar with today highlighted, using invented demo data" width="720">
 </p>
 
 The screenshots use an invented lease ("Demo SUV") and made-up readings.
 
 > **Beta.** Expect rough edges while it is still being tested.
 
-- Day-by-day calendar for the whole lease, today marked, past days crossed off
+- Calendar for the whole lease: swipe or tap through months, tap a day for the odometer you should be at, or switch to the year view. Today is marked
 - Odometer log: over or under pace, miles remaining, miles per day, projected odometer at lease end
 - Chart of your readings against the allowed line
 - One container, one small JSON file in a volume, no database server

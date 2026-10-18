@@ -222,3 +222,13 @@ test('the icons are the road mark and the manifest and page point at real files'
   const png = await fetch(BASE + '/icon-512.png');
   assert.strictEqual(png.headers.get('content-type'), 'image/png');
 });
+
+test('the page has the slim header, pace status, merged glance card, month and year calendar', async () => {
+  const js = await (await fetch(BASE + '/app.js')).text();
+  for (const k of ['summary-line', 'hero-status', 'merge-rule', 'month-nav', "'months year'", 'day-detail', 'touchstart']) assert.ok(js.includes(k), k);
+  assert.ok(!js.includes('s.readings.slice().reverse()'), 'no readings list under the chart');
+  assert.ok(js.includes('drawChart') || js.includes('function chart('), 'chart is kept');
+  const css = await (await fetch(BASE + '/style.css')).text();
+  assert.match(css, /\.stats\.tight/);
+  assert.match(css, /\.month\.big \.day[^}]*min-height: 44px/);
+});

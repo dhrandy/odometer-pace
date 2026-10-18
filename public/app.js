@@ -5,6 +5,7 @@
   var me = { username: '', role: 'user' };
   var mode = 'app';
   var ui = { accent: 'purple', oled: false };
+  var factsOpen = false;
 
   // Remember the theme on this device so the login page matches before the server answers.
   try { ui = Object.assign(ui, JSON.parse(localStorage.getItem('op_ui') || '{}')); } catch (e) { /* keep defaults */ }
@@ -45,6 +46,9 @@
     gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
     logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
     history: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    left: '<path d="M15 6l-6 6 6 6"/>',
+    right: '<path d="M9 6l6 6-6 6"/>',
+    chevron: '<path d="M6 9l6 6 6-6"/>',
     back: '<path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>',
     trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
     today: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3"/><path d="M12 19v3"/><path d="M2 12h3"/><path d="M19 12h3"/>',
@@ -494,15 +498,8 @@
     var s = status, L = s.lease;
     var plan = Lease.makePlan({ startDate: L.start_date, years: L.years, totalMiles: L.total_miles, startOdometer: L.start_odometer });
 
-    var hero = el('header', { class: 'hero' }, [el('div', { class: 'hero-inner' }, [
-      el('div', { class: 'topbar' }, [
-        brandBlock(),
-        el('nav', {}, [
-          (s.options && s.options.history !== false) ? iconBtn('history', 'History', renderHistory, 'on-hero') : null,
-          iconBtn('gear', 'Settings', function () { renderSettings(false); }, 'on-hero'),
-          iconBtn('logout', 'Log out', logout, 'on-hero')
-        ])
-      ]),
+    var summary = [L.vehicle, fmt(L.total_miles) + ' mi', L.state === 'not_started' ? 'starts ' + longDate(L.start_date) : L.state === 'complete' ? 'lease complete' : 'day ' + fmt(L.day_of_lease) + ' of ' + fmt(L.days_total)].filter(Boolean).join(' \u00b7 ');
+    var factsBox = el('div', { class: 'hero-facts' }, [
       el('h1', { text: fmt(L.total_miles) + ' Miles, Day by Day' }),
       el('ul', { class: 'facts' }, [
         L.vehicle ? el('li', { text: L.vehicle }) : null,
@@ -510,11 +507,39 @@
         el('li', { text: fmt(L.miles_per_year) + ' miles a year' }),
         el('li', { text: 'Odometer limit ' + fmt(L.odometer_limit) })
       ])
+    ]);
+    factsBox.hidden = !factsOpen;
+    var line = el('button', { class: 'summary-line', type: 'button', 'aria-expanded': String(factsOpen), onclick: function () {
+      factsOpen = !factsOpen;
+      factsBox.hidden = !factsOpen;
+      line.setAttribute('aria-expanded', String(factsOpen));
+      line.classList.toggle('open', factsOpen);
+    } }, [el('span', { text: summary }), icon('chevron')]);
+    line.classList.toggle('open', factsOpen);
+    var hero = el('header', { class: 'hero' }, [el('div', { class: 'hero-inner' }, [
+      el('div', { class: 'topbar' }, [
+        logoMark(), el('div', { class: 'brand', text: 'Odometer Pace' }),
+        el('nav', {}, [
+          (s.options && s.options.history !== false) ? iconBtn('history', 'History', renderHistory, 'on-hero') : null,
+          iconBtn('gear', 'Settings', function () { renderSettings(false); }, 'on-hero'),
+          iconBtn('logout', 'Log out', logout, 'on-hero')
+        ])
+      ]),
+      line, factsBox
     ])]);
 
     var cards = [];
-    if (s.glance) cards.push(glanceCard(s));
-    cards.push(standCard(s, plan), odometerCard(s, plan));
+    if (s.glance) {
+      // One card: the glance numbers on top, the day line and bar below.
+      var merged = glanceCard(s), stand = standCard(s, plan);
+      merged.appendChild(el('div', { class: 'merge-rule' }));
+      Array.prototype.slice.call(stand.children, 1).forEach(function (c) {
+        if (c.classList.contains('stand-line')) c.classList.add('sm');
+        merged.appendChild(c);
+      });
+      cards.push(merged);
+    } else cards.push(standCard(s, plan));
+    cards.push(odometerCard(s, plan));
     if (s.options && s.options.whatif && s.latest && s.lease.state === 'active') cards.push(whatIfCard(s, plan));
     cards.push(calendar(s, plan));
     var wrap = el('div', { class: 'wrap' }, cards);
@@ -560,7 +585,7 @@
       if (!r || r.projected_vs_limit === null) { out.appendChild(el('p', { class: 'note', text: 'Not enough readings to project yet.' })); return; }
       var over = r.projected_vs_limit > 0;
       var items = [
-        stat('Projected at end', fmt(r.projected_end_odometer), (over ? fmt(r.projected_vs_limit) + ' over' : fmt(-r.projected_vs_limit) + ' under') + ' the limit', over ? 'over' : 'under')
+        stat('Projected end', fmt(r.projected_end_odometer), (over ? fmt(r.projected_vs_limit) + ' over' : fmt(-r.projected_vs_limit) + ' under') + ' the limit', over ? 'over' : 'under')
       ];
       if (o.overageRate && o.overage) items.push(stat('Projected fee', money(r.projected_fee), over ? 'at ' + money(o.overageRate) + ' a mile' : 'nothing owed', over ? 'over' : 'under'));
       if (r.miles_per_day_to_stay_under !== null) items.push(stat('To stay under', fmt1(r.miles_per_day_to_stay_under) + '/day', 'for the days that are left'));
@@ -676,9 +701,11 @@
     var under = b.miles_over_pace < 0;
     var pastLimit = b.miles_remaining < 0;
     var projOver = b.projected_vs_limit > 0;
-    card.appendChild(el('p', { class: 'verdict' + (over ? ' over' : under ? ' under' : '') }, [
-      b.miles_over_pace === 0 ? 'Right on pace' : fmt(Math.abs(b.miles_over_pace)) + ' mi ' + (over ? 'over' : 'under') + ' pace',
-      ' ', el('small', { text: 'as of ' + longDate(b.date) })
+    card.appendChild(el('div', { class: 'hero-status ' + (over ? 'over' : under ? 'under' : '') }, [
+      el('p', { class: 'label', text: 'as of ' + longDate(b.date) }),
+      el('div', { class: 'huge', text: fmt(Math.abs(b.miles_over_pace)) }),
+      el('div', { class: 'huge-sub', text: b.miles_over_pace === 0 ? 'miles, right on pace' : 'miles ' + (over ? 'over' : 'under') + ' pace' }),
+      el('p', { class: 'hero-note', text: 'You are at ' + fmt(b.odometer) + '. On pace would be ' + fmt(b.on_pace_odometer) + '.' })
     ]));
     var w = b.warning || s.warning;
     if (w && w.level !== 'none') {
@@ -688,14 +715,11 @@
       ]));
     }
     if (w && w.stale_note) card.appendChild(el('p', { class: 'note', text: w.stale_note }));
-    var stats = el('div', { class: 'stats' }, [
-      stat('Your reading', fmt(b.odometer), longDate(b.date)),
-      stat('On pace', fmt(b.on_pace_odometer), 'odometer you should be at'),
-      stat(over ? 'Over pace' : 'Under pace', (over ? '+' : '') + fmt(b.miles_over_pace), 'miles vs on-pace odometer', over ? 'over' : under ? 'under' : ''),
+    var stats = el('div', { class: 'stats tight' }, [
       stat('Remaining', fmt(b.miles_remaining), 'to the ' + fmt(s.lease.odometer_limit) + ' limit' + (pastLimit ? ' (past it)' : ''), pastLimit ? 'over' : ''),
       stat('Your pace', fmt1(b.miles_per_day_so_far) + '/day', 'since the lease started'),
       b.miles_per_day_to_stay_under === null ? null : stat('To stay under', fmt1(b.miles_per_day_to_stay_under) + '/day', 'for the days that are left'),
-      stat('Projected at end', b.projected_end_odometer === null ? 'n/a' : fmt(b.projected_end_odometer),
+      stat('Projected end', b.projected_end_odometer === null ? 'n/a' : fmt(b.projected_end_odometer),
         b.projected_vs_limit === null ? '' : (projOver ? fmt(b.projected_vs_limit) + ' over' : fmt(-b.projected_vs_limit) + ' under') + ' the limit' + (b.projected_includes_plan ? ', with your planned ' + s.lease.planned_change.miles_per_day + ' mi/day from ' + longDate(s.lease.planned_change.from) : ''), projOver ? 'over' : b.projected_vs_limit === null ? '' : 'under'),
       s.overage && s.overage.projected_fee !== null ? stat('Projected fee', money(s.overage.projected_fee), s.overage.projected_over_miles > 0 ? fmt(s.overage.projected_over_miles) + ' mi over at ' + money(s.overage.rate_per_mile) + ' a mile' : 'nothing owed at this pace', s.overage.projected_over_miles > 0 ? 'over' : 'under') : null,
       stat('Miles used', fmt(b.miles_used), 'of ' + fmt(s.lease.total_miles) + ' allowed')
@@ -706,19 +730,6 @@
     }
     card.appendChild(chart(s, plan));
 
-    var log = el('ul', { class: 'log' });
-    s.readings.slice().reverse().forEach(function (r) {
-      var who = '';
-      if (r.source && r.source.indexOf('web:') === 0) who = ' by ' + r.source.slice(4);
-      else if (r.source && r.source.indexOf('api:') === 0) who = ' via ' + r.source.slice(4);
-      log.appendChild(el('li', {}, [
-        el('span', {}, [longDate(r.date) + ' \u00b7 ' + fmt(r.odometer) + ' mi', el('span', { class: 'src', text: who })]),
-        me.role === 'admin' ? iconBtn('trash', 'Delete reading from ' + longDate(r.date), function () {
-          api('DELETE', '/api/readings/' + r.date).then(refresh);
-        }, 'danger') : null
-      ]));
-    });
-    card.appendChild(log);
     return card;
   }
 
@@ -785,65 +796,128 @@
 
   // ---------- calendar ----------
 
+  // Month view (day numbers, tap a day for details) and a year view of the whole lease.
   function calendar(s, plan) {
+    var startN = Lease.dayNum(plan.startDate), endN = startN + plan.dayCount - 1;
     var todayIdx = Lease.dayIndex(plan, s.today);
-    var readingDates = {};
-    s.readings.forEach(function (r) { readingDates[r.date] = true; });
+    var readingByDate = {};
+    s.readings.forEach(function (r) { readingByDate[r.date] = r; });
+    function ym(key) { return { y: Number(key.slice(0, 4)), m: Number(key.slice(5, 7)) - 1 }; }
+    var firstM = ym(Lease.fromDayNum(startN)), lastM = ym(Lease.fromDayNum(endN));
+    function monthNo(c) { return c.y * 12 + c.m; }
+    var clampKey = Math.min(Math.max(Lease.dayNum(s.today), startN), endN);
+    var cur = ym(Lease.fromDayNum(clampKey));
+    var selected = Lease.fromDayNum(clampKey);
+    var yearIdx = 0;
+    plan.yearStarts.forEach(function (st, i) { if (clampKey >= Lease.dayNum(st)) yearIdx = i; });
+    var view = 'month';
     var box = el('div', {});
-    var todayCell = null;
+    var body = el('div');
+
+    function monthName(c) { return new Date(Date.UTC(c.y, c.m, 1)).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }); }
+    function keyOf(yy, mm, d) { return yy + '-' + ('0' + (mm + 1)).slice(-2) + '-' + ('0' + d).slice(-2); }
+
+    // The days of one month, limited to the lease. pick is called with a date key when a day is tapped.
+    function grid(c, lo, hi, pick, mini) {
+      var g = el('div', { class: 'grid' });
+      if (!mini) ['S', 'M', 'T', 'W', 'T', 'F', 'S'].forEach(function (d) { g.appendChild(el('div', { class: 'dow', text: d })); });
+      var firstDow = new Date(Date.UTC(c.y, c.m, 1)).getUTCDay();
+      for (var b = 0; b < firstDow; b++) g.appendChild(el('div', { class: 'day blank' }));
+      var dim = new Date(Date.UTC(c.y, c.m + 1, 0)).getUTCDate();
+      for (var d = 1; d <= dim; d++) {
+        var key = keyOf(c.y, c.m, d), n = Lease.dayNum(key);
+        if (n < lo || n > hi) { g.appendChild(el('div', { class: 'day blank' })); continue; }
+        var idx = n - startN;
+        var cls = 'day';
+        if (idx < todayIdx) cls += ' past';
+        if (idx === todayIdx) cls += ' today';
+        if (readingByDate[key]) cls += ' reading';
+        if (!mini && key === selected) cls += ' selected';
+        var cell = el(mini ? 'div' : 'button', mini ? { class: cls } : { class: cls, type: 'button', 'aria-label': longDate(key), 'aria-pressed': String(key === selected), onclick: (function (k) { return function () { pick(k); }; })(key) }, mini ? [] : [el('span', { class: 'n', text: String(d) })]);
+        g.appendChild(cell);
+      }
+      return g;
+    }
+
+    function navRow(title, sub, onPrev, onNext, prevOff, nextOff) {
+      var prev = iconBtn('left', 'Previous', onPrev, 'quiet');
+      var next = iconBtn('right', 'Next', onNext, 'quiet');
+      prev.disabled = prevOff; next.disabled = nextOff;
+      return el('div', { class: 'month-nav' }, [prev, el('h3', {}, [title, sub ? el('small', { text: sub }) : null]), next]);
+    }
+
+    function monthView() {
+      var wrap = el('div');
+      function go(delta) {
+        var n = monthNo(cur) + delta;
+        cur = { y: Math.floor(n / 12), m: n % 12 };
+        draw();
+      }
+      var card = el('div', { class: 'month big' }, [grid(cur, startN, endN, function (k) { selected = k; draw(); }, false)]);
+      var touchX = null;
+      card.addEventListener('touchstart', function (e) { touchX = e.touches[0].clientX; }, { passive: true });
+      card.addEventListener('touchend', function (e) {
+        if (touchX === null) return;
+        var dx = e.changedTouches[0].clientX - touchX; touchX = null;
+        if (dx < -50 && monthNo(cur) < monthNo(lastM)) go(1);
+        else if (dx > 50 && monthNo(cur) > monthNo(firstM)) go(-1);
+      }, { passive: true });
+      wrap.appendChild(navRow(monthName(cur), '', function () { go(-1); }, function () { go(1); }, monthNo(cur) <= monthNo(firstM), monthNo(cur) >= monthNo(lastM)));
+      wrap.appendChild(card);
+      var sel = ym(selected);
+      var inView = sel.y === cur.y && sel.m === cur.m;
+      var key = inView ? selected : keyOf(cur.y, cur.m, 1);
+      if (!inView) selected = key;
+      var idx = Lease.dayIndex(plan, key);
+      var allowed = Lease.allowedThrough(plan, idx);
+      var r = readingByDate[key];
+      wrap.appendChild(el('div', { class: 'card day-detail' }, [
+        el('div', { class: 'card-head' }, [el('p', { class: 'label', text: longDate(key) + (idx === todayIdx ? ' \u00b7 today' : '') }),
+          r && me.role === 'admin' ? iconBtn('trash', 'Delete reading from ' + longDate(key), function () { api('DELETE', '/api/readings/' + key).then(refresh); }, 'danger') : null]),
+        el('p', { class: 'dd-line' }, [el('strong', { text: fmt(plan.startOdometer + allowed) }), ' on-pace odometer at the end of this day']),
+        el('p', { class: 'note dd-note', text: fmt(allowed) + ' miles allowed so far. ' + (r ? 'Your reading: ' + fmt(r.odometer) + ' mi.' : 'No reading on this day.') })
+      ]));
+      wrap.appendChild(el('p', { class: 'note center-note', text: 'Swipe left or right, or use the arrows. A dot marks a day with a reading.' }));
+      return wrap;
+    }
+
+    function yearView() {
+      var wrap = el('div');
+      var yStart = Lease.dayNum(plan.yearStarts[yearIdx]);
+      var yEnd = yStart + plan.yearLens[yearIdx] - 1;
+      wrap.appendChild(navRow('Lease year ' + (yearIdx + 1), fmt(Math.round(plan.perYear)) + ' miles',
+        function () { yearIdx--; draw(); }, function () { yearIdx++; draw(); }, yearIdx <= 0, yearIdx >= plan.years - 1));
+      var months = el('div', { class: 'months year' });
+      var c = ym(Lease.fromDayNum(yStart)), end = ym(Lease.fromDayNum(yEnd));
+      while (monthNo(c) <= monthNo(end)) {
+        var mc = { y: c.y, m: c.m };
+        var tile = el('button', { class: 'month', type: 'button', 'aria-label': 'Open ' + monthName(mc), onclick: function (m) { return function () { cur = m; selected = keyOf(m.y, m.m, 1); if (Lease.dayNum(selected) < startN) selected = plan.startDate; view = 'month'; draw(); }; }(mc) },
+          [el('h3', { text: new Date(Date.UTC(mc.y, mc.m, 1)).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }) }), grid(mc, yStart, yEnd, null, true)]);
+        months.appendChild(tile);
+        c = { y: c.m === 11 ? c.y + 1 : c.y, m: (c.m + 1) % 12 };
+      }
+      wrap.appendChild(months);
+      wrap.appendChild(el('p', { class: 'note center-note', text: 'Tap a month to open it. A dot marks a day with a reading.' }));
+      return wrap;
+    }
+
+    function draw() {
+      var seg = el('div', { class: 'seg', role: 'tablist' }, ['month', 'year'].map(function (v) {
+        return el('button', { class: view === v ? 'on' : '', type: 'button', role: 'tab', 'aria-selected': String(view === v), text: v === 'month' ? 'Month' : 'Year', onclick: function () { view = v; draw(); } });
+      }));
+      body.innerHTML = '';
+      body.appendChild(seg);
+      body.appendChild(view === 'month' ? monthView() : yearView());
+    }
 
     box.appendChild(el('div', { class: 'cal-head' }, [
       el('h2', { text: 'Every day of the lease' }),
       iconBtn('today', 'Jump to today', function () {
-        if (todayCell) todayCell.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        cur = ym(Lease.fromDayNum(clampKey)); selected = Lease.fromDayNum(clampKey); view = 'month'; draw();
       }, 'quiet')
     ]));
-    box.appendChild(el('p', { class: 'note', text: 'Each box shows the day and the total miles you may have driven by the end of that day. Crossed-off days are behind you. A dot marks a day with a reading.' }));
-
-    var dayNo = 0;
-    for (var y = 0; y < plan.years; y++) {
-      var yStart = Lease.dayNum(plan.yearStarts[y]);
-      var yEnd = yStart + plan.yearLens[y] - 1;
-      box.appendChild(el('h3', { class: 'year-title', text: 'Lease year ' + (y + 1) + ' \u00b7 ' + fmt(Math.round(plan.perYear)) + ' miles' }));
-      var months = el('div', { class: 'months' });
-
-      var first = new Date(Lease.fromDayNum(yStart) + 'T00:00:00Z');
-      var cy = first.getUTCFullYear(), cm = first.getUTCMonth();
-      var endD = new Date(Lease.fromDayNum(yEnd) + 'T00:00:00Z');
-      while (cy < endD.getUTCFullYear() || (cy === endD.getUTCFullYear() && cm <= endD.getUTCMonth())) {
-        months.appendChild(monthBlock(cy, cm));
-        cm++;
-        if (cm > 11) { cm = 0; cy++; }
-      }
-      box.appendChild(months);
-      dayNo += plan.yearLens[y];
-    }
-
-    function monthBlock(yy, mm) {
-      var title = new Date(Date.UTC(yy, mm, 1)).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-      var grid = el('div', { class: 'grid' });
-      ['S', 'M', 'T', 'W', 'T', 'F', 'S'].forEach(function (d) { grid.appendChild(el('div', { class: 'dow', text: d })); });
-      var firstDow = new Date(Date.UTC(yy, mm, 1)).getUTCDay();
-      for (var b = 0; b < firstDow; b++) grid.appendChild(el('div', { class: 'day blank' }));
-      var dim = new Date(Date.UTC(yy, mm + 1, 0)).getUTCDate();
-      for (var d = 1; d <= dim; d++) {
-        var key = yy + '-' + ('0' + (mm + 1)).slice(-2) + '-' + ('0' + d).slice(-2);
-        var n = Lease.dayNum(key);
-        if (n < yStart || n > yEnd) { grid.appendChild(el('div', { class: 'day blank' })); continue; }
-        var idx = n - Lease.dayNum(plan.startDate);
-        var cls = 'day';
-        if (idx < todayIdx) cls += ' past';
-        if (idx === todayIdx) cls += ' today';
-        if (readingDates[key]) cls += ' reading';
-        var cell = el('div', { class: cls, title: longDate(key) + ': ' + fmt(Lease.allowedThrough(plan, idx)) + ' miles allowed so far' }, [
-          el('span', { class: 'n', text: String(d) }),
-          el('span', { class: 'm', text: fmt(Lease.allowedThrough(plan, idx)) })
-        ]);
-        if (idx === todayIdx) todayCell = cell;
-        grid.appendChild(cell);
-      }
-      return el('div', { class: 'month' }, [el('h3', { text: title }), grid]);
-    }
+    box.appendChild(body);
+    draw();
     return box;
   }
 
