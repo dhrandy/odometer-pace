@@ -215,3 +215,21 @@ html[data-oled="true"] .day.past { background: #08080a; }
 .confirm { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--over-soft); border-left: 4px solid var(--over); }
 .confirm .row-btns { margin-top: 10px; }
 .confirm .row-btns .btn { padding: 0 18px; height: 44px; }
+
+.foot { text-align: center; font-size: .8rem; margin: 18px 0 26px; }
+.foot a { color: var(--muted); text-decoration: none; padding: 10px 6px; }
+.foot a:hover { text-decoration: underline; }
+.opt { margin: 0 0 10px; }
+.opt .note { margin: 2px 0 0 36px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; }
+.glance-main { display: flex; gap: 6px 28px; align-items: flex-end; margin: 4px 0 8px; }
+.glance .big { font-size: 2.6rem; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.glance .mid { font-size: 1.6rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.glance .n { font-size: .85rem; color: var(--muted); }
+.glance.under .big, .glance.under .glance-status strong { color: var(--under); }
+.glance.over .big, .glance.over .glance-status strong { color: var(--over); }
+.glance.under { box-shadow: inset 4px 0 0 var(--under); }
+.glance.over { box-shadow: inset 4px 0 0 var(--over); }
+.glance-status { margin: 0; font-size: .95rem; }
+.glance .note { margin: 8px 0 0; }
+.field input[type=file] { font-size: 1rem; padding: 10px; }

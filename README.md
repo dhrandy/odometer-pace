@@ -207,6 +207,38 @@ When you are over pace, a banner appears above the numbers with a plain sentence
 
 Nothing shows when you are on or under pace. The level comes from your latest reading and the overall projection, so weekly readings work as well as daily ones. If the last reading is more than 10 days old, a quiet note says so. The same information is in `/api/v1/status` as a `warning` object, so an assistant can tell you. The app sends no emails or push notifications.
 
+## Optional features
+
+Settings has an **Optional features** card. Everything in it is off until the admin turns it on.
+
+- **Overage cost**: set the dollars per mile your lease charges over the limit. Shows the projected fee at turn-in next to the projection.
+- **Trip what-if**: type the miles of a planned trip to see how it changes the projected end odometer, the fee and the miles per day to stay under. The trip is added on top of what you already drive.
+- **Glance view**: a card at the top with the miles you can drive this week and by the end of today and still be on pace, colored amber when over and blue when on track. It also turns on `GET /api/v1/glance`, a small read-only endpoint for widgets.
+- **Export and backup**: download readings as CSV, or a JSON backup of lease settings and readings. Restore from a backup file in the same card. Backups never contain logins or API keys.
+
+### Home Assistant sensor
+
+Create an API key in Settings, turn on the glance view, then add this to your Home Assistant `configuration.yaml`. Put the key in `secrets.yaml` as `odometer_pace_auth: "Bearer op_..."` and replace the address with your own.
+
+```yaml
+rest:
+  - resource: http://YOUR-SERVER:8461/api/v1/glance
+    scan_interval: 3600
+    headers:
+      Authorization: !secret odometer_pace_auth
+    sensor:
+      - name: "Lease miles this week"
+        value_template: "{{ value_json.can_drive_week }}"
+        unit_of_measurement: "mi"
+      - name: "Lease miles today"
+        value_template: "{{ value_json.can_drive_today }}"
+        unit_of_measurement: "mi"
+      - name: "Lease pace"
+        value_template: "{{ value_json.status }}"
+```
+
+`status` is `on_track` or `over`. The numbers come from your latest reading, so they only move when someone adds one.
+
 ## Planned change
 
 If your driving will change, for example one driver does a lot more until a certain month, the admin can add one planned change in Settings: "from this date, expect this many miles a day". It is optional and empty by default. Until that date the projection uses your pace so far. After it, the projection uses the planned pace. The projected-at-end card and the warnings use it, and both say so when it is active. `/api/v1/status` shows it as `lease.planned_change` and `latest.projected_includes_plan`. Clear both fields to remove it.

@@ -51,6 +51,15 @@
       <h2>GET /api/v1/readings</h2>
       <p class="sub">Just the readings, oldest first.</p>
     </div>
+    <div class="card">
+      <h2>GET /api/v1/glance</h2>
+      <p class="sub">Small read-only summary for widgets. Returns 404 until the admin turns on the glance view in Settings.</p>
+<pre>{ "today": "2030-04-05", "vehicle": "", "state": "active", "status": "on_track",
+  "level": "none", "reading_date": "2030-04-04", "days_since_reading": 1,
+  "miles_over_pace": -60, "can_drive_today": 31, "can_drive_week": 274,
+  "miles_remaining": 34860, "average_per_day": 32.9 }</pre>
+      <p class="note"><code>can_drive_week</code> is the miles you can drive from your latest reading through the end of the sixth day from today and still be on pace. <code>status</code> is <code>on_track</code> or <code>over</code>. Invented numbers.</p>
+    </div>
     <p><a class="btn quiet btn-link" href="/">Back to the app</a></p>
   </div>
 </body>

@@ -92,6 +92,7 @@
   function show(node) {
     app.textContent = '';
     app.appendChild(node);
+    app.appendChild(el('p', { class: 'foot' }, [el('a', { href: 'https://github.com/dhrandy/odometer-pace', target: '_blank', rel: 'noopener noreferrer', text: 'Odometer Pace on GitHub' })]));
     window.scrollTo(0, 0);
   }
 
@@ -126,6 +127,67 @@
       ])
     ])]));
     name.focus();
+  }
+
+  // Optional features, off until the admin turns them on.
+  function featuresCard() {
+    var o = (status && status.options) || {};
+    var names = [
+      ['overage', 'Overage cost', 'Shows what the miles past the limit would cost at turn-in.'],
+      ['whatif', 'Trip what-if', 'A small calculator for how a planned trip changes your projection.'],
+      ['glance', 'Glance view', 'A card at the top with the miles you can drive today and this week, and a read-only /api/v1/glance for widgets and Home Assistant.'],
+      ['backup', 'Export and backup', 'Download your readings as CSV, or a full backup you can restore later.']
+    ];
+    var boxes = {};
+    var rate = el('input', { type: 'number', inputmode: 'decimal', min: '0', max: '10', step: 'any', placeholder: 'Dollars per mile over, e.g. 0.25' });
+    rate.value = o.overageRate || '';
+    var msg = el('p', { class: 'err', role: 'status' });
+    var rows = names.map(function (n) {
+      var cb = el('input', { type: 'checkbox' });
+      cb.checked = o[n[0]] === true;
+      boxes[n[0]] = cb;
+      return el('div', { class: 'opt' }, [el('label', { class: 'check' }, [cb, n[1]]), el('p', { class: 'note', text: n[2] })]);
+    });
+    var box = el('div', { class: 'card' }, [
+      el('h2', { text: 'Optional features' }),
+      el('p', { class: 'sub', text: 'All off by default. Turn on only what you want to see.' })
+    ].concat(rows, [
+      el('label', { class: 'field' }, ['Overage rate (used by Overage cost and Trip what-if)', rate]),
+      el('div', { class: 'spacer' }),
+      el('button', { class: 'btn', type: 'button', text: 'Save', onclick: function () {
+        msg.className = 'err'; msg.textContent = '';
+        api('PUT', '/api/options', { overage: boxes.overage.checked, whatif: boxes.whatif.checked, glance: boxes.glance.checked, backup: boxes.backup.checked, overageRate: rate.value })
+          .then(function (st) { status = st; msg.className = 'err ok'; msg.textContent = 'Saved.'; renderSettings(false); })
+          .catch(function (x) { msg.textContent = x.message; });
+      } }),
+      msg
+    ]));
+    if (o.backup) {
+      var rmsg = el('p', { class: 'err', role: 'status' });
+      var file = el('input', { type: 'file', accept: 'application/json,.json', 'aria-label': 'Backup file to restore' });
+      file.addEventListener('change', function () {
+        var f = file.files[0];
+        if (!f) return;
+        rmsg.className = 'err'; rmsg.textContent = '';
+        f.text().then(function (t) {
+          var parsed;
+          try { parsed = JSON.parse(t); } catch (e) { throw new Error('That file is not valid JSON.'); }
+          var n = Array.isArray(parsed.readings) ? parsed.readings.length : 0;
+          if (!confirm('Restore this backup? It replaces your lease settings and all ' + (status.readings || []).length + ' current readings with the ' + n + ' in the file. Logins and API keys stay as they are.')) { file.value = ''; return; }
+          return api('POST', '/api/restore', parsed).then(function () { rmsg.className = 'err ok'; rmsg.textContent = 'Restored.'; boot(); });
+        }).catch(function (x) { rmsg.textContent = x.message; file.value = ''; });
+      });
+      box.appendChild(el('div', { class: 'spacer' }));
+      box.appendChild(el('h3', { class: 'minor', text: 'Export and backup' }));
+      box.appendChild(el('p', { class: 'row' }, [
+        el('a', { class: 'btn quiet btn-link', href: '/api/export.csv', download: 'odometer-readings.csv', text: 'Download CSV' }), ' ',
+        el('a', { class: 'btn quiet btn-link', href: '/api/backup', download: 'odometer-pace-backup.json', text: 'Download backup' })
+      ]));
+      box.appendChild(el('p', { class: 'note', text: 'The backup holds your lease settings and readings, not logins or API keys.' }));
+      box.appendChild(el('label', { class: 'field' }, ['Restore from a backup file', file]));
+      box.appendChild(rmsg);
+    }
+    return box;
   }
 
   // ---------- settings ----------
@@ -198,9 +260,9 @@
       loadKeys(keysBox);
     }
     if (!first) {
-      kids.splice(1, 0, appearanceCard());
-      if (mode !== 'proxy') kids.splice(2, 0, usersCard());
-      if (mode !== 'proxy') kids.splice(3, 0, passwordCard());
+      kids.splice(1, 0, appearanceCard(), featuresCard());
+      if (mode !== 'proxy') kids.splice(3, 0, usersCard());
+      if (mode !== 'proxy') kids.splice(4, 0, passwordCard());
     }
     kids.push(el('p', {}, [first ? iconBtn('logout', 'Log out', logout, 'quiet') : iconBtn('back', 'Back', boot, 'quiet')]));
     show(el('div', { class: 'wrap top' }, kids));
@@ -410,8 +472,68 @@
       ])
     ])]);
 
-    var wrap = el('div', { class: 'wrap' }, [standCard(s, plan), odometerCard(s, plan), calendar(s, plan)]);
+    var cards = [];
+    if (s.glance) cards.push(glanceCard(s));
+    cards.push(standCard(s, plan), odometerCard(s, plan));
+    if (s.options && s.options.whatif && s.latest && s.lease.state === 'active') cards.push(whatIfCard(s, plan));
+    cards.push(calendar(s, plan));
+    var wrap = el('div', { class: 'wrap' }, cards);
     show(el('div', {}, [hero, wrap]));
+  }
+
+  function money(n) { return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+  // Miles you can drive today and this week and still be on pace.
+  function glanceCard(s) {
+    var g = s.glance;
+    if (g.state !== 'active' || g.status === 'no_reading') {
+      var text = g.state === 'not_started' ? 'The lease has not started yet.' : g.state === 'complete' ? 'The lease is complete.' : 'Add a reading to see how far you can drive this week.';
+      return el('div', { class: 'card glance' }, [el('p', { class: 'label', text: 'At a glance' }), el('p', { class: 'stand-line', text: text })]);
+    }
+    var over = g.status === 'over';
+    var head = over ? 'Over pace by ' + fmt(g.miles_over_pace) + ' mi today.' : 'On track.';
+    var sub = over
+      ? 'Drive a little less to get back on track. Pace allows about ' + fmt1(g.average_per_day) + ' mi a day.'
+      : 'Staying within these miles keeps you on pace. Pace allows about ' + fmt1(g.average_per_day) + ' mi a day.';
+    var node = el('div', { class: 'card glance ' + (over ? 'over' : 'under') }, [
+      el('p', { class: 'label', text: 'At a glance' }),
+      el('div', { class: 'glance-main' }, [
+        el('div', {}, [el('div', { class: 'big', text: fmt(g.can_drive_week) }), el('div', { class: 'n', text: 'miles you can drive this week' })]),
+        el('div', {}, [el('div', { class: 'mid', text: fmt(g.can_drive_today) }), el('div', { class: 'n', text: 'by the end of today' })])
+      ]),
+      el('p', { class: 'glance-status' }, [el('strong', { text: head }), ' ' + sub]),
+      g.days_since_reading !== null && g.days_since_reading > 3 ? el('p', { class: 'note', text: 'Based on the reading from ' + longDate(g.reading_date) + '. A fresh one sharpens this.' }) : null
+    ]);
+    return node;
+  }
+
+  // A trip is added on top of the miles already projected.
+  function whatIfCard(s, plan) {
+    var b = s.latest, o = s.options;
+    var trip = el('input', { type: 'number', inputmode: 'numeric', min: '0', step: '1', placeholder: 'e.g. 800', 'aria-label': 'Trip miles' });
+    var out = el('div', { 'aria-live': 'polite' });
+    function draw() {
+      out.textContent = '';
+      var miles = Math.round(Number(trip.value));
+      if (!trip.value || !isFinite(miles) || miles < 0) return;
+      var r = Lease.whatIf(plan, { projected: b.projected_end_odometer, remaining: b.miles_remaining, daysLeft: b.days_left }, miles, o.overageRate);
+      if (!r || r.projected_vs_limit === null) { out.appendChild(el('p', { class: 'note', text: 'Not enough readings to project yet.' })); return; }
+      var over = r.projected_vs_limit > 0;
+      var items = [
+        stat('Projected at end', fmt(r.projected_end_odometer), (over ? fmt(r.projected_vs_limit) + ' over' : fmt(-r.projected_vs_limit) + ' under') + ' the limit', over ? 'over' : 'under')
+      ];
+      if (o.overageRate && o.overage) items.push(stat('Projected fee', money(r.projected_fee), over ? 'at ' + money(o.overageRate) + ' a mile' : 'nothing owed', over ? 'over' : 'under'));
+      if (r.miles_per_day_to_stay_under !== null) items.push(stat('To stay under', fmt1(r.miles_per_day_to_stay_under) + '/day', 'for the days that are left'));
+      out.appendChild(el('div', { class: 'stats' }, items));
+    }
+    trip.addEventListener('input', draw);
+    return el('div', { class: 'card' }, [
+      el('h2', { text: 'Trip what-if' }),
+      el('p', { class: 'sub', text: 'Drive somewhere extra? Enter the round-trip miles to see the effect on your projection. It is added on top of what you already drive.' }),
+      el('label', { class: 'field' }, ['Trip miles', trip]),
+      el('div', { class: 'spacer' }),
+      out
+    ]);
   }
 
   function standCard(s, plan) {
@@ -534,6 +656,7 @@
       b.miles_per_day_to_stay_under === null ? null : stat('To stay under', fmt1(b.miles_per_day_to_stay_under) + '/day', 'for the days that are left'),
       stat('Projected at end', b.projected_end_odometer === null ? 'n/a' : fmt(b.projected_end_odometer),
         b.projected_vs_limit === null ? '' : (projOver ? fmt(b.projected_vs_limit) + ' over' : fmt(-b.projected_vs_limit) + ' under') + ' the limit' + (b.projected_includes_plan ? ', with your planned ' + s.lease.planned_change.miles_per_day + ' mi/day from ' + longDate(s.lease.planned_change.from) : ''), projOver ? 'over' : b.projected_vs_limit === null ? '' : 'under'),
+      s.overage && s.overage.projected_fee !== null ? stat('Projected fee', money(s.overage.projected_fee), s.overage.projected_over_miles > 0 ? fmt(s.overage.projected_over_miles) + ' mi over at ' + money(s.overage.rate_per_mile) + ' a mile' : 'nothing owed at this pace', s.overage.projected_over_miles > 0 ? 'over' : 'under') : null,
       stat('Miles used', fmt(b.miles_used), 'of ' + fmt(s.lease.total_miles) + ' allowed')
     ]);
     card.appendChild(stats);

@@ -32,7 +32,7 @@ if (require.main === module) dropRoot();
 
 
 function emptyData() {
-  return { settings: null, readings: [], tokens: [], auth: null, users: [], sessions: [], ui: { accent: 'purple', oled: false } };
+  return { settings: null, readings: [], tokens: [], auth: null, users: [], sessions: [], ui: { accent: 'purple', oled: false }, options: { overage: false, whatif: false, glance: false, backup: false, overageRate: null } };
 }
 
 function loadData() {
@@ -115,13 +115,13 @@ function sendJson(res, status, body, headers) {
   res.end(text);
 }
 
-function readBody(req) {
+function readBody(req, max) {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
     req.on('data', (c) => {
       size += c.length;
-      if (size > 20000) { reject(new Error('too big')); req.destroy(); return; }
+      if (size > (max || 20000)) { reject(new Error('too big')); req.destroy(); return; }
       chunks.push(c);
     });
     req.on('end', () => {
@@ -204,6 +204,57 @@ function sortedReadings() {
 
 function round1(n) { return n === null ? null : Math.round(n * 10) / 10; }
 
+
+// Optional features. All start OFF and the admin turns each one on in Settings.
+const FEATURES = ['overage', 'whatif', 'glance', 'backup'];
+function optionsBody() {
+  const o = data.options || {};
+  const out = {};
+  FEATURES.forEach((k) => { out[k] = o[k] === true; });
+  out.overageRate = Number(o.overageRate) > 0 ? Number(o.overageRate) : null;
+  return out;
+}
+// Returns the cleaned options, or null when the rate is not a number from 0 to 10.
+function cleanOptions(b) {
+  const out = {};
+  FEATURES.forEach((k) => { out[k] = b[k] === true; });
+  const raw = String(b.overageRate === undefined || b.overageRate === null ? '' : b.overageRate).trim().replace(/^\$/, '');
+  if (raw === '') out.overageRate = null;
+  else if (isFinite(Number(raw)) && Number(raw) >= 0 && Number(raw) <= 10) out.overageRate = Number(raw) > 0 ? Math.round(Number(raw) * 10000) / 10000 : null;
+  else return null;
+  return out;
+}
+
+// Guards a spreadsheet cell from being read as a formula.
+function csvCell(v) {
+  let t = String(v === undefined || v === null ? '' : v);
+  if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;
+  return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+}
+function readingsCsv() {
+  return 'date,odometer,source\n' + sortedReadings().map((r) => [r.date, r.odometer, r.source || 'web'].map(csvCell).join(',')).join('\n') + '\n';
+}
+
+// Checks a backup file. Returns { error } or { settings, readings, options }.
+function parseBackup(b) {
+  if (!b || b.app !== 'odometer-pace' || !b.settings || !Array.isArray(b.readings)) return { error: 'That is not an Odometer Pace backup file.' };
+  if (b.readings.length > 5000) return { error: 'That backup has too many readings.' };
+  const settings = cleanSettings(b.settings);
+  if (!settings || settings === 'plan') return { error: 'The lease settings in that file are not valid.' };
+  const plan = Lease.makePlan(settings);
+  const readings = [];
+  for (const r of b.readings) {
+    const odometer = Number(r && r.odometer);
+    const date = String(r && r.date);
+    const err = Lease.checkReading(plan, readings, date, odometer);
+    if (err) return { error: 'Reading ' + date + ': ' + err };
+    if (readings.some((x) => x.date === date)) return { error: 'The date ' + date + ' appears twice.' };
+    readings.push({ date: date, odometer: odometer, source: String((r && r.source) || 'restore').slice(0, 60), saved: new Date().toISOString() });
+  }
+  const options = cleanOptions(b.options || {}) || { overage: false, whatif: false, glance: false, backup: false, overageRate: null };
+  return { settings: settings, readings: readings, options: options };
+}
+
 // Clean JSON for the page and for agents.
 function statusBody() {
   const plan = Lease.makePlan(data.settings);
@@ -251,6 +302,14 @@ function statusBody() {
     };
   }
   body.warning = Lease.warning(plan, ev, today);
+  const opt = optionsBody();
+  body.options = opt;
+  if (opt.overage && opt.overageRate) {
+    const over = ev && ev.projected !== null ? Math.max(0, ev.projected - plan.limit) : null;
+    const now = ev ? Math.max(0, ev.odometer - plan.limit) : 0;
+    body.overage = { rate_per_mile: opt.overageRate, projected_over_miles: over, projected_fee: over === null ? null : Lease.fee(over, opt.overageRate), current_over_miles: now, current_fee: Lease.fee(now, opt.overageRate) };
+  }
+  if (opt.glance) body.glance = Lease.glance(plan, ev, today, body.warning);
   return body;
 }
 
@@ -313,6 +372,12 @@ async function handleApi(req, res, url) {
     }
     token.last_used = new Date().toISOString();
     if (p === '/api/v1/status' && method === 'GET') return sendJson(res, 200, statusBody());
+    if (p === '/api/v1/glance' && method === 'GET') {
+      const st = statusBody();
+      if (!st.configured) return sendJson(res, 404, { error: 'Lease settings are not set up yet.' });
+      if (!st.glance) return sendJson(res, 404, { error: 'The glance view is turned off in Settings.' });
+      return sendJson(res, 200, Object.assign({ today: st.today, vehicle: st.lease.vehicle }, st.glance));
+    }
     if (p === '/api/v1/readings' && method === 'GET') return sendJson(res, 200, { readings: statusBody().readings || [] });
     if (p === '/api/v1/readings' && method === 'POST') {
       let b;
@@ -388,6 +453,44 @@ async function handleApi(req, res, url) {
     if (record) record.ui = next; else data.ui = next;
     saveData();
     return sendJson(res, 200, uiBody(me));
+  }
+
+  if (p === '/api/options' && method === 'PUT') {
+    if (!isAdmin) return adminOnly();
+    let b;
+    try { b = await readBody(req); } catch (e) { return sendJson(res, 400, { error: 'Bad request.' }); }
+    const o = cleanOptions(b);
+    if (!o) return sendJson(res, 400, { error: 'The overage rate is dollars per mile, from 0 to 10.' });
+    data.options = o;
+    saveData();
+    return sendJson(res, 200, statusBody());
+  }
+
+  if (p === '/api/export.csv' && method === 'GET') {
+    if (!isAdmin) return adminOnly();
+    if (!optionsBody().backup) return sendJson(res, 404, { error: 'Export is turned off in Settings.' });
+    res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="odometer-readings.csv"', 'Cache-Control': 'no-store' });
+    return res.end(readingsCsv());
+  }
+  if (p === '/api/backup' && method === 'GET') {
+    if (!isAdmin) return adminOnly();
+    if (!optionsBody().backup) return sendJson(res, 404, { error: 'Backup is turned off in Settings.' });
+    const file = { app: 'odometer-pace', version: 1, exported: new Date().toISOString(), settings: data.settings, options: optionsBody(), readings: sortedReadings().map((r) => ({ date: r.date, odometer: r.odometer, source: r.source || 'web' })) };
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': 'attachment; filename="odometer-pace-backup.json"', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify(file, null, 2));
+  }
+  if (p === '/api/restore' && method === 'POST') {
+    if (!isAdmin) return adminOnly();
+    if (!optionsBody().backup) return sendJson(res, 404, { error: 'Restore is turned off in Settings.' });
+    let b;
+    try { b = await readBody(req, 2000000); } catch (e) { return sendJson(res, 400, { error: 'That file is too big or not JSON.' }); }
+    const r = parseBackup(b);
+    if (r.error) return sendJson(res, 400, { error: r.error });
+    data.settings = r.settings;
+    data.readings = r.readings;
+    data.options = r.options;
+    saveData();
+    return sendJson(res, 200, statusBody());
   }
 
   if (p === '/api/settings') {
