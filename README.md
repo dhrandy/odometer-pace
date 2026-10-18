@@ -119,8 +119,6 @@ curl -X POST https://your-host/api/v1/readings \
 
 ### Instructions to give your AI assistant
 
-The same instructions are served without a login at `/llms.txt`, and the login page has a short hidden note (not shown, not read out by screen readers) pointing assistants to that file. Neither holds any secrets, and anyone who opens the address can read them. The pages are not indexed by search engines.
-
 Paste this into your assistant's instructions or memory. Replace the two placeholders first. Keep the real key out of anything that gets shared or saved to a public place.
 
 ````

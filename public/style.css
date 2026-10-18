@@ -181,6 +181,3 @@ html[data-oled="true"] .day.past { background: #08080a; }
 .row-btns .btn { padding: 8px 12px; font-size: 14px; width: auto; }
 .err.ok { color: var(--accent-mid); }
 .token-row .btn { width: auto; padding: 8px 12px; font-size: 14px; }
-
-/* Text for AI assistants: kept in the page but not shown or announced. */
-.ai-note { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
