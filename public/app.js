@@ -4,7 +4,6 @@
   var status = null;
   var me = { username: '', role: 'user' };
   var mode = 'app';
-  var scrolledToToday = false;
   var ui = { accent: 'purple', oled: false };
 
   // Remember the theme on this device so the login page matches before the server answers.
@@ -371,12 +370,6 @@
 
     var wrap = el('div', { class: 'wrap' }, [standCard(s, plan), odometerCard(s, plan), calendar(s, plan)]);
     show(el('div', {}, [hero, wrap]));
-    // On a fresh page load, land on today in the calendar. Saving a reading keeps you where you are.
-    if (!scrolledToToday) {
-      scrolledToToday = true;
-      var today = document.querySelector('.day.today');
-      if (today) today.scrollIntoView({ block: 'center' });
-    }
   }
 
   function standCard(s, plan) {
