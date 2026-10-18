@@ -11,8 +11,10 @@
 A small self-hosted page that tracks a car lease's mileage. It shows every day of the lease as a calendar, crosses off the days that have passed, and compares your odometer with where it should be. Readings are saved on your server, so your phone and your computer always match.
 
 <p>
-  <img src="docs/desktop.png" alt="Desktop view with the pace warning, stats and projection chart, using invented demo data" width="640">
-  <img src="docs/phone.png" alt="Phone view of the day-by-day calendar with today highlighted, using invented demo data" width="240">
+  <img src="docs/desktop-stats.png" alt="Desktop view with the pace warning, stats and projection chart, using invented demo data" width="720">
+</p>
+<p>
+  <img src="docs/desktop-calendar.png" alt="Desktop view of the day-by-day calendar with today highlighted, using invented demo data" width="720">
 </p>
 
 The screenshots use an invented lease ("Demo SUV") and made-up readings.
