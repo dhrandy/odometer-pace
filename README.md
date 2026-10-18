@@ -117,6 +117,53 @@ curl -X POST https://your-host/api/v1/readings \
 
 `date` is optional and defaults to today. One reading per date, and the odometer cannot go lower than an earlier reading.
 
+### Instructions to give your AI assistant
+
+Paste this into your assistant's instructions or memory. Replace the two placeholders first. Keep the real key out of anything that gets shared or saved to a public place.
+
+````
+You can keep my car lease mileage up to date through a small API called Odometer Pace.
+
+Base URL: https://YOUR-HOST
+API key: YOUR-KEY
+
+Send the key on every request as a header:
+Authorization: Bearer YOUR-KEY
+For POST requests also send: Content-Type: application/json
+
+What you can do:
+
+1. Check where I stand: GET /api/v1/status
+   Useful fields in the reply:
+   - latest.odometer and latest.date: the last reading on file
+   - latest.pace_status: "over", "under" or "on_pace"
+   - latest.miles_over_pace: positive means over pace, negative means under
+   - latest.miles_remaining: miles left before the limit
+   - latest.miles_per_day_to_stay_under: what I can drive per day from now on
+   - latest.projected_end_odometer and latest.projected_vs_limit: where I end up at this pace
+   - allowed_odometer_today: the on-pace odometer for today
+   - lease.state: "not_started", "active" or "complete"
+   If latest is null, there are no readings yet. If configured is false, the lease is not set up and I need to do that in the app.
+
+2. List readings: GET /api/v1/readings
+   Returns {"readings": [{"date", "odometer", "source"}]}, oldest first.
+
+3. Add a reading: POST /api/v1/readings
+   Body: {"odometer": 12345}
+   Or with a date: {"odometer": 12345, "date": "2030-04-05"}
+   The date is optional (YYYY-MM-DD) and defaults to today. Only one reading is kept per date, so a second one for the same date replaces the first.
+   Success is HTTP 200 with {"saved": {...}, "status": {...}}, and the status is the same shape as GET /api/v1/status.
+   A rejected reading is HTTP 400 with {"error": "plain reason"}, for example if the odometer is lower than an earlier reading or the date is before the lease starts. Tell me the reason. Do not retry with a changed number to get around it.
+   HTTP 401 means the key is wrong or revoked. HTTP 429 means too many failed attempts, so wait and tell me.
+
+Rules:
+- Never print, repeat or save the API key anywhere except where I put it for you.
+- Only add a reading when I give you the odometer number or you read it from a photo or screen I showed you. Never guess, estimate or calculate one.
+- Odometer readings are whole miles. If I say "about 12.3k", ask me for the exact number.
+- Before adding, tell me the number and date you are about to save if there is any doubt. After adding, tell me the new pace in one or two sentences: miles over or under pace, and how many miles I have left.
+- You cannot delete readings or change settings. If something needs fixing, tell me to do it in the app.
+````
+
 ## How the allowance is counted
 
 Each lease year gets an equal share of the total (36,000 miles over 3 years is 12,000 per year). That share is spread evenly over that lease year's own days, so a leap day does not skew the pace. The "on pace" odometer is your starting odometer plus the miles allowed through the end of the day of your reading. The odometer limit is the starting odometer plus the total allowed.
