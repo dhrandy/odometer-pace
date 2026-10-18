@@ -1,0 +1,12 @@
+{
+  "name": "lease-miles",
+  "version": "0.1.0",
+  "description": "A self-hosted lease mileage calendar and odometer log.",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "engines": { "node": ">=22" }
+}

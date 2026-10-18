@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <title>Lease Miles API</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="wrap top">
+    <div class="card">
+      <h2>Lease Miles API</h2>
+      <p class="sub">For AI agents and scripts. Create a key in Settings, then send it as a Bearer token. A key can add and read odometer readings and read the status. It cannot see or change settings, other keys, or the login.</p>
+      <p><code>Authorization: Bearer lm_...</code></p>
+    </div>
+    <div class="card">
+      <h2>GET /api/v1/status</h2>
+      <p class="sub">Everything in one call: lease facts, today's allowed odometer, how the newest reading compares, and all readings.</p>
+<pre>curl -H "Authorization: Bearer $KEY" https://YOUR-HOST/api/v1/status</pre>
+<pre>{
+  "configured": true,
+  "today": "2030-04-05",
+  "lease": { "start_date": "...", "end_date": "...", "total_miles": 36000,
+             "odometer_limit": 36010, "day_of_lease": 36, "days_total": 1096, "state": "active" },
+  "allowed_odometer_today": 1210,
+  "latest": {
+    "date": "2030-04-05", "odometer": 1150,
+    "on_pace_odometer": 1210, "miles_over_pace": -60, "pace_status": "under",
+    "miles_used": 1140, "miles_remaining": 34860,
+    "miles_per_day_so_far": 31.7, "miles_per_day_to_stay_under": 32.9,
+    "projected_end_odometer": 34750, "projected_vs_limit": -1260, "days_left": 1060
+  },
+  "readings": [ { "date": "2030-04-05", "odometer": 1150, "source": "api:Instinct" } ]
+}</pre>
+      <p class="note">Numbers above are an invented example. <code>miles_over_pace</code> is negative when you are under. <code>latest</code> is null until the first reading.</p>
+    </div>
+    <div class="card">
+      <h2>POST /api/v1/readings</h2>
+      <p class="sub">Save an odometer reading. <code>date</code> is optional (YYYY-MM-DD) and defaults to today on the server. One reading per date, a second one replaces the first. The odometer cannot go lower than an earlier reading.</p>
+<pre>curl -X POST https://YOUR-HOST/api/v1/readings \
+  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"odometer": 1150, "date": "2030-04-05"}'</pre>
+      <p class="note">Returns <code>{"saved": {...}, "status": {...}}</code> on success, or <code>{"error": "..."}</code> with HTTP 400 and a plain reason.</p>
+    </div>
+    <div class="card">
+      <h2>GET /api/v1/readings</h2>
+      <p class="sub">Just the readings, oldest first.</p>
+    </div>
+    <p><a class="btn quiet btn-link" href="/">Back to the app</a></p>
+  </div>
+</body>
+</html>

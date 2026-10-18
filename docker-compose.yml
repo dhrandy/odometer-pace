@@ -1,0 +1,34 @@
+# Lease Miles. Copy this whole file into your stack.
+# Fill in the variables in Dockhand's Environment tab (or a .env file next to this file).
+services:
+  lease-miles:
+    container_name: lease-miles
+    build: https://github.com/dhrandy/lease-miles.git#main
+    restart: unless-stopped
+    ports:
+      - "${PORT}:${PORT}"
+    environment:
+      PORT: ${PORT}
+      TZ: ${TZ}
+      AUTH_MODE: ${AUTH_MODE}
+      COOKIE_SECURE: ${COOKIE_SECURE}
+      TRUST_PROXY: ${TRUST_PROXY}
+    volumes:
+      - ${DATA_PATH}:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:$${PORT}/api/session >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

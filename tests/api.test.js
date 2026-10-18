@@ -1,0 +1,129 @@
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawn } = require('child_process');
+
+// Invented sample lease, not real household data.
+const SETTINGS = { vehicle: 'Test car', startDate: '2030-03-01', years: 3, totalMiles: 36000, startOdometer: 10 };
+const PORT = 18000 + Math.floor(Math.random() * 1000);
+const BASE = 'http://127.0.0.1:' + PORT;
+let proc, dir, cookie = '', apiKey = '';
+
+async function call(method, url, body, headers) {
+  const h = Object.assign({}, headers);
+  if (body !== undefined) h['Content-Type'] = 'application/json';
+  if (cookie) h.Cookie = cookie;
+  const r = await fetch(BASE + url, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body), redirect: 'manual' });
+  const sc = r.headers.get('set-cookie');
+  if (sc) cookie = sc.split(';')[0];
+  let json = null;
+  try { json = await r.clone().json(); } catch (e) { /* not json */ }
+  return { status: r.status, json, headers: r.headers, res: r };
+}
+const agent = (method, url, body, key) => call(method, url, body, { Authorization: 'Bearer ' + (key || apiKey), Cookie: '' });
+
+test.before(async () => {
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lm-'));
+  proc = spawn('node', ['server.js'], { cwd: path.join(__dirname, '..'), env: Object.assign({}, process.env, { PORT, DATA_DIR: dir, TZ: 'America/New_York' }) });
+  for (let i = 0; i < 50; i++) {
+    try { await fetch(BASE + '/api/session'); return; } catch (e) { await new Promise((r) => setTimeout(r, 100)); }
+  }
+  throw new Error('server did not start');
+});
+test.after(() => { proc.kill(); fs.rmSync(dir, { recursive: true, force: true }); });
+
+test('everything is locked until a password is set and used', async () => {
+  assert.strictEqual((await call('GET', '/api/status')).status, 401);
+  assert.strictEqual((await call('POST', '/api/setup-password', { password: 'short' })).status, 400);
+  assert.strictEqual((await call('POST', '/api/setup-password', { password: 'correct horse' })).status, 200);
+  assert.strictEqual((await call('POST', '/api/setup-password', { password: 'another one!' })).status, 400);
+  assert.strictEqual((await call('GET', '/api/status')).status, 200);
+});
+
+test('wrong password is refused, right one works after logout', async () => {
+  await call('POST', '/api/logout', {});
+  cookie = '';
+  assert.strictEqual((await call('POST', '/api/login', { password: 'nope nope nope' })).status, 401);
+  assert.strictEqual((await call('POST', '/api/login', { password: 'correct horse' })).status, 200);
+});
+
+test('settings then readings', async () => {
+  assert.strictEqual((await call('GET', '/api/status')).json.configured, false);
+  assert.strictEqual((await call('PUT', '/api/settings', { startDate: 'bad' })).status, 400);
+  assert.strictEqual((await call('PUT', '/api/settings', SETTINGS)).status, 200);
+  const r = await call('POST', '/api/readings', { odometer: '1,000', date: '2030-03-31' });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.json.latest.odometer, 1000);
+  assert.strictEqual((await call('POST', '/api/readings', { odometer: 900, date: '2030-04-05' })).status, 400);
+  assert.strictEqual((await call('POST', '/api/readings', { odometer: 5, date: '2029-01-01' })).status, 400);
+});
+
+test('form posts without JSON are refused', async () => {
+  const r = await fetch(BASE + '/api/readings', { method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'odometer=5' });
+  assert.strictEqual(r.status, 415);
+});
+
+test('api key: shown once, can read and write readings only', async () => {
+  const made = await call('POST', '/api/tokens', { name: 'Test agent' });
+  assert.strictEqual(made.status, 200);
+  apiKey = made.json.key;
+  assert.ok(apiKey.startsWith('lm_'));
+  assert.ok(!fs.readFileSync(path.join(dir, 'lease-miles.json'), 'utf8').includes(apiKey), 'key must be stored hashed');
+  assert.ok(!JSON.stringify((await call('GET', '/api/tokens')).json).includes(apiKey));
+
+  const st = await agent('GET', '/api/v1/status');
+  assert.strictEqual(st.status, 200);
+  assert.strictEqual(st.json.latest.pace_status, 'under');
+  const w = await agent('POST', '/api/v1/readings', { odometer: 1100, date: '2030-04-02' });
+  assert.strictEqual(w.status, 200);
+  assert.strictEqual(w.json.saved.odometer, 1100);
+  assert.strictEqual((await agent('POST', '/api/v1/readings', { odometer: 'abc' })).status, 400);
+  assert.strictEqual((await agent('GET', '/api/v1/readings')).json.readings.length, 2);
+  assert.strictEqual(JSON.stringify(st.json).includes('correct horse'), false);
+
+  // The key does nothing on the web routes.
+  for (const url of ['/api/settings', '/api/tokens', '/api/status']) {
+    const r = await fetch(BASE + url, { headers: { Authorization: 'Bearer ' + apiKey } });
+    assert.strictEqual(r.status, 401, url);
+  }
+  assert.strictEqual((await agent('GET', '/api/v1/status', undefined, 'lm_wrong')).status, 401);
+});
+
+test('a session cookie does not work on the agent api', async () => {
+  const r = await fetch(BASE + '/api/v1/status', { headers: { Cookie: cookie } });
+  assert.strictEqual(r.status, 401);
+});
+
+test('revoked key stops working', async () => {
+  const list = (await call('GET', '/api/tokens')).json.tokens;
+  assert.strictEqual((await call('DELETE', '/api/tokens/' + list[0].id, {})).status, 200);
+  assert.strictEqual((await agent('GET', '/api/v1/status')).status, 401);
+});
+
+test('docs need a login, robots and headers are set', async () => {
+  const saved = cookie; cookie = '';
+  assert.strictEqual((await call('GET', '/api/docs')).status, 302);
+  cookie = saved;
+  assert.strictEqual((await call('GET', '/api/docs')).status, 200);
+  const robots = await call('GET', '/robots.txt');
+  assert.ok((await robots.res.text()).includes('Disallow: /'));
+  const home = await call('GET', '/');
+  assert.ok(home.headers.get('x-robots-tag').includes('noindex'));
+  assert.ok(home.headers.get('content-security-policy'));
+  assert.strictEqual((await call('GET', '/docs.html')).status, 404);
+  assert.strictEqual((await call('GET', '/..%2fserver.js')).status, 404);
+});
+
+test('readings survive a restart', async () => {
+  proc.kill();
+  await new Promise((r) => setTimeout(r, 300));
+  proc = spawn('node', ['server.js'], { cwd: path.join(__dirname, '..'), env: Object.assign({}, process.env, { PORT, DATA_DIR: dir, TZ: 'America/New_York' }) });
+  for (let i = 0; i < 50; i++) {
+    try { await fetch(BASE + '/api/session'); break; } catch (e) { await new Promise((r) => setTimeout(r, 100)); }
+  }
+  const s = await call('GET', '/api/status');
+  assert.strictEqual(s.status, 200);
+  assert.strictEqual(s.json.readings.length, 2);
+});

@@ -1,0 +1,9 @@
+{
+  "name": "Lease Miles",
+  "short_name": "Lease Miles",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f3f7",
+  "theme_color": "#4c1d95",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

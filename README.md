@@ -1,0 +1,114 @@
+# Lease Miles
+
+A small self-hosted page that tracks a car lease's mileage. It shows every day of the lease as a calendar, crosses off the days that have passed, and compares your odometer with where it should be. Readings are saved on your server, so your phone and your computer always match.
+
+> **Beta.** Expect rough edges while it is still being tested.
+
+- Day-by-day calendar for the whole lease, today marked, past days crossed off
+- Odometer log: over or under pace, miles remaining, miles per day, projected odometer at lease end
+- Chart of your readings against the allowed line
+- One container, one small JSON file in a volume, no database server
+- Dark theme, works on phones
+- API keys so an AI or script can add readings and read your status
+- Your lease details are typed in the app on first run. Nothing about your lease is in the code.
+
+## Setup
+
+1. Copy `docker-compose.yml` into a new stack (Dockhand, Portainer, plain Docker, anything that reads Compose files).
+2. Fill in the variables. Either put them in a `.env` file next to the compose file, or paste them in Dockhand's Environment tab. Do not add `:-` defaults, some tools choke on them.
+3. Start the stack.
+4. Open `http://your-server:8461`. The first screen asks you to choose a password.
+5. Enter your lease: start date, number of years, total miles allowed, and the odometer reading on the day you got the car.
+
+### Variables
+
+| Variable | What to put | Example |
+| --- | --- | --- |
+| `PORT` | Port to listen on (host and container use the same number) | `8461` |
+| `TZ` | Your time zone, so "today" is right | `America/New_York` |
+| `AUTH_MODE` | `app` for the built-in login, `proxy` if your reverse proxy handles login | `app` |
+| `COOKIE_SECURE` | `true` when you reach it over https, `false` on plain http | `true` |
+| `TRUST_PROXY` | `1` when it sits behind a reverse proxy, otherwise `0` | `1` |
+| `DATA_PATH` | Folder on your server where readings are stored | `/DATA/AppData/lease-miles` |
+
+A filled-out example is in `.env.example`.
+
+### Compose file
+
+```yaml
+services:
+  lease-miles:
+    container_name: lease-miles
+    build: https://github.com/dhrandy/lease-miles.git#main
+    restart: unless-stopped
+    ports:
+      - "${PORT}:${PORT}"
+    environment:
+      PORT: ${PORT}
+      TZ: ${TZ}
+      AUTH_MODE: ${AUTH_MODE}
+      COOKIE_SECURE: ${COOKIE_SECURE}
+      TRUST_PROXY: ${TRUST_PROXY}
+    volumes:
+      - ${DATA_PATH}:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:$${PORT}/api/session >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+```
+
+The container builds from this repository, so the Dockerfile is only used by the build and you never run it yourself. To update: stop, rebuild or pull, start. Your readings live in `DATA_PATH` and are kept.
+
+## Reverse proxy
+
+Any reverse proxy works: point it at the container port and turn on https. The app has its own password login (`AUTH_MODE=app`), so the proxy does not need one. Set `COOKIE_SECURE=true` and `TRUST_PROXY=1` when you use https behind a proxy.
+
+If you would rather put your own login in front (Authentik, Authelia and similar), set `AUTH_MODE=proxy`. The app then trusts everything that reaches it, so make sure the page can only be reached through the login. Keep `/api/v1/` open past that login: those routes are protected by API keys instead, which is how an AI or script gets in.
+
+The app sends `noindex` headers and a `robots.txt` that disallows everything. Your server settings, readings and keys are never reachable without logging in.
+
+## API keys for AI and scripts
+
+Open Settings, then API keys, give the key a name and create it. The key is shown once, so copy it then. Only a hash is stored. Revoke it any time.
+
+A key can add odometer readings and read your status and readings. It cannot see settings, other keys, or the login. The full docs, with examples, are at `/api/docs` after you log in.
+
+```
+curl -H "Authorization: Bearer $KEY" https://your-host/api/v1/status
+
+curl -X POST https://your-host/api/v1/readings \
+  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"odometer": 1150, "date": "2030-04-05"}'
+```
+
+`date` is optional and defaults to today. One reading per date, and the odometer cannot go lower than an earlier reading.
+
+## How the allowance is counted
+
+Each lease year gets an equal share of the total (36,000 miles over 3 years is 12,000 per year). That share is spread evenly over that lease year's own days, so a leap day does not skew the pace. The "on pace" odometer is your starting odometer plus the miles allowed through the end of the day of your reading. The odometer limit is the starting odometer plus the total allowed.
+
+## Development
+
+```
+npm test
+PORT=8461 DATA_DIR=./data node server.js
+```
+
+Node 22, no dependencies, no build step. Tests live in `tests/`.
+
+## License
+
+MIT, see `LICENSE`.
