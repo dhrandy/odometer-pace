@@ -90,7 +90,8 @@ The first login you create is the admin. The admin adds logins for the rest of t
 | See the calendar, stats and chart | yes | yes |
 | Add odometer readings | yes | yes |
 | Delete readings | yes | no |
-| Change lease settings and appearance | yes | no |
+| Change lease settings | yes | no |
+| Pick own accent color and OLED black | yes | yes |
 | Add, remove and reset logins | yes | no |
 | Create and revoke their own API keys | yes | yes |
 | See and revoke everyone's API keys | yes | no |

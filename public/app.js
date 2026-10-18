@@ -173,6 +173,7 @@
         el('h2', { text: 'Signed in as ' + me.username }),
         el('p', { class: 'sub', text: 'You can add odometer readings. The admin manages the lease settings and logins.' })
       ]),
+      appearanceCard(),
       passwordCard(),
       el('div', { class: 'card' }, [
         el('h2', { text: 'Your API keys' }),
@@ -248,7 +249,7 @@
 
     return el('div', { class: 'card' }, [
       el('h2', { text: 'Logins' }),
-      el('p', { class: 'sub', text: 'Users can add readings and use their own API keys. Only you, the admin, can change the lease, appearance, logins and delete readings.' }),
+      el('p', { class: 'sub', text: 'Users can add readings and use their own API keys. Only you, the admin, can change the lease and logins or delete readings. Everyone picks their own appearance.' }),
       list,
       el('div', { class: 'spacer' }),
       el('form', { onsubmit: function (e) {
@@ -271,7 +272,7 @@
   function appearanceCard() {
     var box = el('div', { class: 'card' }, [
       el('h2', { text: 'Appearance' }),
-      el('p', { class: 'sub', text: 'Pick an accent color. These are saved on the server, so every device matches.' })
+      el('p', { class: 'sub', text: 'Pick your accent color. It is saved to your login, so your devices match. Other logins keep their own.' })
     ]);
     var swatches = el('div', { class: 'swatches', role: 'group', 'aria-label': 'Accent color' });
     var names = { purple: 'Purple', blue: 'Blue', cyan: 'Cyan', green: 'Green', pink: 'Pink', orange: 'Orange' };

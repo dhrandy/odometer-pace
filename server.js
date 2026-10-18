@@ -231,8 +231,10 @@ function statusBody() {
 
 const ACCENTS = ['purple', 'blue', 'cyan', 'green', 'pink', 'orange'];
 
-function uiBody() {
-  const ui = data.ui || {};
+// Each login keeps its own look. The proxy "user" has no record, so it uses the shared one.
+function uiBody(me) {
+  const record = me && me.id !== 'proxy' ? data.users.find((u) => u.id === me.id) : null;
+  const ui = (record ? record.ui : data.ui) || {};
   return { accent: ACCENTS.includes(ui.accent) ? ui.accent : 'purple', oled: ui.oled === true, accents: ACCENTS };
 }
 
@@ -338,16 +340,17 @@ async function handleApi(req, res, url) {
     return sendJson(res, 415, { error: 'Send JSON.' });
   }
 
-  if (p === '/api/status' && method === 'GET') return sendJson(res, 200, Object.assign(statusBody(), { ui: uiBody(), me: { username: me.username, role: me.role } }));
+  if (p === '/api/status' && method === 'GET') return sendJson(res, 200, Object.assign(statusBody(), { ui: uiBody(me), me: { username: me.username, role: me.role } }));
 
   if (p === '/api/ui' && method === 'PUT') {
-    if (!isAdmin) return adminOnly();
     let b;
     try { b = await readBody(req); } catch (e) { return sendJson(res, 400, { error: 'Bad request.' }); }
     if (!ACCENTS.includes(b.accent)) return sendJson(res, 400, { error: 'Unknown color.' });
-    data.ui = { accent: b.accent, oled: b.oled === true };
+    const next = { accent: b.accent, oled: b.oled === true };
+    const record = me.id !== 'proxy' ? data.users.find((u) => u.id === me.id) : null;
+    if (record) record.ui = next; else data.ui = next;
     saveData();
-    return sendJson(res, 200, uiBody());
+    return sendJson(res, 200, uiBody(me));
   }
 
   if (p === '/api/settings') {

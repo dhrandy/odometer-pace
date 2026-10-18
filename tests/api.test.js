@@ -70,13 +70,20 @@ test('admin adds a user, who can add readings but not manage anything', async ()
   assert.strictEqual((await call('POST', '/api/users', { username: 'Wife', password: 'wife password' })).status, 400);
   cookie = '';
   assert.strictEqual((await call('POST', '/api/login', { username: 'wife', password: 'wife password' })).status, 200);
+  const wifeCookie = cookie;
   const st = await call('GET', '/api/status');
   assert.strictEqual(st.json.me.role, 'user');
   assert.strictEqual((await call('POST', '/api/readings', { odometer: 1200, date: '2030-04-03' })).status, 200);
   assert.strictEqual((await call('GET', '/api/status')).json.readings.find((r) => r.date === '2030-04-03').source, 'web:wife');
-  for (const [m, u, b] of [['GET', '/api/settings'], ['PUT', '/api/settings', SETTINGS], ['PUT', '/api/ui', { accent: 'blue' }], ['GET', '/api/users'], ['POST', '/api/users', { username: 'x1', password: 'password123' }], ['DELETE', '/api/readings/2030-04-03', {}]]) {
+  for (const [m, u, b] of [['GET', '/api/settings'], ['PUT', '/api/settings', SETTINGS], ['GET', '/api/users'], ['POST', '/api/users', { username: 'x1', password: 'password123' }], ['DELETE', '/api/readings/2030-04-03', {}]]) {
     assert.strictEqual((await call(m, u, b)).status, 403, m + ' ' + u);
   }
+  // Appearance belongs to each login.
+  assert.strictEqual((await call('PUT', '/api/ui', { accent: 'pink', oled: true })).status, 200);
+  assert.strictEqual((await call('GET', '/api/status')).json.ui.accent, 'pink');
+  cookie = adminCookie;
+  assert.strictEqual((await call('GET', '/api/status')).json.ui.accent, 'purple');
+  cookie = wifeCookie;
   assert.strictEqual((await call('POST', '/api/me/password', { current: 'wrong', password: 'newpassword1' })).status, 400);
   assert.strictEqual((await call('POST', '/api/me/password', { current: 'wife password', password: 'newpassword1' })).status, 200);
   // clean up the extra reading and keep the admin session for later tests
