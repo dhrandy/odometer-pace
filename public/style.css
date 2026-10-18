@@ -30,7 +30,7 @@ button, input, select { font: inherit; }
 }
 .hero-inner, .wrap { max-width: 1080px; margin: 0 auto; }
 .topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 14px; }
-.topbar .brand { font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; opacity: .8; }
+.topbar .brand { font-size: .95rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
 .topbar nav { display: flex; gap: 8px; }
 .link-btn {
   background: rgba(255,255,255,.14); color: #fff; border: 0; border-radius: 8px;
@@ -233,3 +233,10 @@ html[data-oled="true"] .day.past { background: #08080a; }
 .glance-status { margin: 0; font-size: .95rem; }
 .glance .note { margin: 8px 0 0; }
 .field input[type=file] { font-size: 1rem; padding: 10px; }
+.brand-block { display: flex; align-items: center; gap: 12px; }
+.logo-mark { flex: none; line-height: 0; }
+.tagline { font-size: .82rem; opacity: .85; margin-top: 2px; }
+.login-brand { margin: 0 0 14px; color: var(--ink); }
+.login-brand .logo-mark svg rect { fill: var(--raised); }
+.login-brand .brand { font-size: 1rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.login-brand .tagline { color: var(--muted); opacity: 1; }

@@ -101,6 +101,17 @@
     return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
+  // The logo: a road narrowing to the horizon with a blue dot. White and sky blue only.
+  var TAGLINE = 'Every mile, on schedule.';
+  function logoMark() {
+    var n = el('span', { class: 'logo-mark', 'aria-hidden': 'true' });
+    n.innerHTML = '<svg viewBox="0 0 48 48" width="48" height="48"><rect width="48" height="48" rx="12" fill="rgba(255,255,255,.14)"/><path d="M17 40L21.5 8h5L31 40z" fill="rgba(255,255,255,.28)"/><path d="M24 36v-5M24 26v-5M24 16v-4" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><circle cx="35" cy="13" r="4" fill="#56b4e9"/></svg>';
+    return n;
+  }
+  function brandBlock() {
+    return el('div', { class: 'brand-block' }, [logoMark(), el('div', {}, [el('div', { class: 'brand', text: 'Odometer Pace' }), el('div', { class: 'tagline', text: TAGLINE })])]);
+  }
+
   // ---------- login and first run ----------
 
   function renderLogin(first) {
@@ -115,7 +126,7 @@
         .catch(function (x) { err.textContent = x.message; });
     }
     show(el('div', { class: 'center' }, [el('div', { class: 'card' }, [
-      el('h1', { text: 'Odometer Pace' }),
+      el('div', { class: 'login-brand' }, [brandBlock()]),
       el('p', { class: 'sub', text: first ? 'First run. Create the admin login. Use 8 or more characters for the password.' : 'Log in to see your mileage.' }),
       el('form', { onsubmit: submit }, [
         el('label', { class: 'field' }, [name]),
@@ -457,7 +468,7 @@
 
     var hero = el('header', { class: 'hero' }, [el('div', { class: 'hero-inner' }, [
       el('div', { class: 'topbar' }, [
-        el('span', { class: 'brand', text: 'Odometer Pace' }),
+        brandBlock(),
         el('nav', {}, [
           iconBtn('gear', 'Settings', function () { renderSettings(false); }, 'on-hero'),
           iconBtn('logout', 'Log out', logout, 'on-hero')
