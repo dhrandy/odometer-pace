@@ -4,7 +4,6 @@
 ![Node 22](https://img.shields.io/badge/Node-22-339933?logo=nodedotjs&logoColor=white)
 ![Odometer Pace](https://img.shields.io/badge/Odometer-Pace-7c3aed)
 ![Status: beta](https://img.shields.io/badge/status-beta-f59e0b)
-![Last commit](https://img.shields.io/github/last-commit/dhrandy/odometer-pace)
 [![Tests](https://github.com/dhrandy/odometer-pace/actions/workflows/test.yml/badge.svg)](https://github.com/dhrandy/odometer-pace/actions/workflows/test.yml)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
