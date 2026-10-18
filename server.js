@@ -17,6 +17,20 @@ const DATA_FILE = path.join(DATA_DIR, 'odometer-pace.json');
 
 // ---------- storage ----------
 
+// The container starts as root only to make the data folder writable, then drops to the node user.
+// This has to happen before the data file is read: with capabilities dropped, root cannot open a
+// file owned by another user, so reading first made the app think there was no data.
+function dropRoot() {
+  if (typeof process.getuid !== 'function' || process.getuid() !== 0) return;
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.chownSync(DATA_DIR, 1000, 1000);
+  if (fs.existsSync(DATA_FILE)) fs.chownSync(DATA_FILE, 1000, 1000);
+  process.setgid(1000);
+  process.setuid(1000);
+}
+if (require.main === module) dropRoot();
+
+
 function emptyData() {
   return { settings: null, readings: [], tokens: [], auth: null, users: [], sessions: [], ui: { accent: 'purple', oled: false } };
 }
@@ -25,8 +39,10 @@ function loadData() {
   try {
     return Object.assign(emptyData(), JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')));
   } catch (e) {
-    if (e.code !== 'ENOENT') console.error('Could not read data file, starting empty:', e.message);
-    return emptyData();
+    if (e.code === 'ENOENT') return emptyData();
+    // Never start empty over a file we could not read: the next save would overwrite it.
+    console.error('Cannot read ' + DATA_FILE + ': ' + e.message);
+    process.exit(1);
   }
 }
 
@@ -519,18 +535,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-// The container starts as root only to make the data folder writable, then drops to the node user.
-function dropRoot() {
-  if (typeof process.getuid !== 'function' || process.getuid() !== 0) return;
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.chownSync(DATA_DIR, 1000, 1000);
-  if (fs.existsSync(DATA_FILE)) fs.chownSync(DATA_FILE, 1000, 1000);
-  process.setgid(1000);
-  process.setuid(1000);
-}
-
 if (require.main === module) {
-  dropRoot();
   server.listen(PORT, () => console.log('Odometer Pace listening on ' + PORT + ' (auth: ' + AUTH_MODE + ', data: ' + DATA_FILE + ')'));
 }
 module.exports = server;

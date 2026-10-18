@@ -228,3 +228,11 @@ test('fonts are served by the app, without a login', async () => {
   const css = await (await fetch(BASE + '/style.css')).text();
   assert.ok(!/https?:\/\//.test(css), 'the stylesheet must not load anything from another site');
 });
+
+test('an unreadable data file stops the server instead of starting empty', async () => {
+  const bad = fs.mkdtempSync(path.join(os.tmpdir(), 'op-bad-'));
+  fs.writeFileSync(path.join(bad, 'odometer-pace.json'), '{ not json');
+  const r = require('child_process').spawnSync('node', ['server.js'], { cwd: path.join(__dirname, '..'), env: Object.assign({}, process.env, { PORT: '8499', DATA_DIR: bad }), timeout: 5000 });
+  assert.notStrictEqual(r.status, 0);
+  assert.strictEqual(fs.readFileSync(path.join(bad, 'odometer-pace.json'), 'utf8'), '{ not json');
+});
