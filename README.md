@@ -130,6 +130,10 @@ PORT=8461 DATA_DIR=./data node server.js
 
 Node 22, no dependencies, no build step. Tests live in `tests/`.
 
+## Fonts
+
+The app serves its own fonts from `public/fonts/`, so nothing is fetched from Google or a CDN and every device draws the same letters. The body font is Inter and the headings use Source Serif 4. Both are under the SIL Open Font License 1.1, which allows bundling with an MIT project. The license texts sit next to the font files.
+
 ## License
 
 MIT, see `LICENSE`.

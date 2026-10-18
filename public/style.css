@@ -1,3 +1,13 @@
+/* Fonts are served by this app, so every device draws the same letters. Licenses are in public/fonts/. */
+@font-face {
+  font-family: "Inter"; font-style: normal; font-weight: 100 900; font-display: swap;
+  src: url("/fonts/inter.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Source Serif 4"; font-style: normal; font-weight: 200 900; font-display: swap;
+  src: url("/fonts/source-serif-4.woff2") format("woff2");
+}
+
 :root {
   --accent: #8b5cf6; --accent-strong: #7c3aed; --accent-strong-hover: #6d28d9; --accent-soft: #2a2145; --accent-mid: #a78bfa; --accent-rgb: 167,139,250; --hero-a: #2e1065; --hero-b: #4c1d95; --accent-past: #191428;
   --ink: #f1ecfa; --muted: #a79fb8; --line: #3a3150; --bg: #141021; --card: #1d1830; --raised: #272040;
@@ -8,7 +18,7 @@ html { color-scheme: dark; }
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0; background: var(--bg); color: var(--ink); line-height: 1.45;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: "Inter", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 button, input, select { font: inherit; }
@@ -28,7 +38,7 @@ button, input, select { font: inherit; }
 }
 .link-btn:hover { background: rgba(255,255,255,.24); }
 .hero h1 {
-  font-family: Georgia, "Times New Roman", serif; font-size: clamp(1.7rem, 5vw, 2.6rem);
+  font-family: "Source Serif 4", serif; font-size: clamp(1.7rem, 5vw, 2.6rem);
   margin: 0 0 10px; letter-spacing: -.01em;
 }
 .facts { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 0; padding: 0; list-style: none; }
@@ -39,7 +49,7 @@ button, input, select { font: inherit; }
   background: var(--card); border: 1px solid var(--line); border-radius: 14px;
   padding: 18px; margin-bottom: 14px; box-shadow: 0 1px 2px rgba(0,0,0,.4);
 }
-.card h2 { margin: 0 0 4px; font-size: 1.1rem; }
+.card h2 { margin: 0 0 4px; font-size: 1.15rem; font-family: "Source Serif 4", serif; }
 .sub { margin: 0 0 12px; color: var(--muted); font-size: .92rem; }
 .label { margin: 0 0 4px; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .stand-line { margin: 0 0 12px; font-size: 1.15rem; font-weight: 600; }
@@ -89,7 +99,7 @@ button, input, select { font: inherit; }
 
 .cal-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin: 22px 2px 10px; }
 .cal-head h2 { margin: 0; font-size: 1.2rem; }
-.year-title { margin: 22px 2px 8px; font-family: Georgia, serif; font-size: 1.15rem; color: var(--accent-mid); }
+.year-title { margin: 22px 2px 8px; font-family: "Source Serif 4", serif; font-size: 1.15rem; color: var(--accent-mid); }
 .months { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
 .month { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
 .month h3 { margin: 0 0 6px; font-size: .95rem; }
@@ -118,8 +128,8 @@ button, input, select { font: inherit; }
 
 .center { max-width: 380px; margin: 18vh auto 0; padding: 0 16px; }
 .center .card { padding: 24px; }
-.center h1 { font-family: Georgia, serif; margin: 0 0 6px; color: var(--accent-mid); }
-.token-box { background: var(--raised); border-radius: 10px; padding: 12px; word-break: break-all; font-family: ui-monospace, Menlo, monospace; font-size: .9rem; margin: 10px 0; }
+.center h1 { font-family: "Source Serif 4", serif; margin: 0 0 6px; color: var(--accent-mid); }
+.token-box { background: var(--raised); border-radius: 10px; padding: 12px; word-break: break-all; font-size: .9rem; margin: 10px 0; }
 .token-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); font-size: .92rem; }
 .spacer { height: 10px; }
 
@@ -136,7 +146,7 @@ button, input, select { font: inherit; }
 .legend i.projected { background: #fbbf24; }
 .btn-link { display: inline-block; text-decoration: none; }
 a { color: var(--accent-mid); }
-pre, code { font-family: ui-monospace, Menlo, monospace; font-size: .85rem; }
+pre, code { font-size: .85rem; }
 pre { background: var(--raised); padding: 12px; border-radius: 10px; overflow-x: auto; }
 code { background: var(--raised); padding: 1px 5px; border-radius: 4px; }
 pre code { padding: 0; background: none; }

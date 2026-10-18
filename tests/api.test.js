@@ -218,3 +218,13 @@ test('theme choice is saved on the server and validated', async () => {
   // The agent API never carries theme data.
   assert.strictEqual(JSON.stringify((await agent('GET', '/api/v1/status', undefined, 'op_x')).json).includes('oled'), false);
 });
+
+test('fonts are served by the app, without a login', async () => {
+  for (const f of ['inter', 'source-serif-4']) {
+    const r = await fetch(BASE + '/fonts/' + f + '.woff2');
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.headers.get('content-type'), 'font/woff2');
+  }
+  const css = await (await fetch(BASE + '/style.css')).text();
+  assert.ok(!/https?:\/\//.test(css), 'the stylesheet must not load anything from another site');
+});
