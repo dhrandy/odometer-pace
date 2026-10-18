@@ -213,7 +213,7 @@ Settings has an **Optional features** card. Everything in it is off until the ad
 
 - **Overage cost**: set the dollars per mile your lease charges over the limit. Shows the projected fee at turn-in next to the projection.
 - **Trip what-if**: type the miles of a planned trip to see how it changes the projected end odometer, the fee and the miles per day to stay under. The trip is added on top of what you already drive.
-- **Glance view**: a card at the top with the miles you can drive this week and by the end of today and still be on pace, amber when over and your accent color when on track. It also turns on `GET /api/v1/glance`, a small read-only endpoint for widgets.
+- **Glance view**: a card at the top with the miles you can still drive today and by the end of the week and stay on pace, amber when over and your accent color when on track. It also turns on `GET /api/v1/glance`, a small read-only endpoint for widgets.
 - **History**: a clock button in the header opens a page that lists every reading that was entered, newest first: the odometer value, the date it is for, the value it replaced (if any), when it was saved, and who entered it. A person shows by name. An AI or script shows as `AI/API` with the key name and the key owner. Deleted readings are logged too. Every login can see it. Turn it off here and the button and page go away (the log keeps recording).
 - **Export and backup**: download readings and history as CSV, or a JSON backup of lease settings, readings and history. Restore from a backup file in the same card. Backups never contain logins or API keys.
 
@@ -243,6 +243,24 @@ rest:
 ## Planned change
 
 If your driving will change, for example one driver does a lot more until a certain month, the admin can add one planned change in Settings: "from this date, expect this many miles a day". It is optional and empty by default. Until that date the projection uses your pace so far. After it, the projection uses the planned pace. The projected-at-end card and the warnings use it, and both say so when it is active. `/api/v1/status` shows it as `lease.planned_change` and `latest.projected_includes_plan`. Clear both fields to remove it.
+
+## What the numbers mean
+
+Two numbers on the main page sound alike and are easy to mix up.
+
+- **The big "miles under pace" or "miles over pace" number** (in the Your odometer card, labeled "at today's reading" or "at your last reading, <date>") compares your latest reading with where the lease said you should be on the day of that reading. Under pace means you had driven fewer miles than the lease allows up to that day.
+- **"You can still drive today"** (in the glance card) is how many miles you can still drive today and be exactly on pace at the end of the day. It is the on-pace odometer for today minus your latest reading. **"You can drive by the end of the week"** is the same idea through the end of the day 6 days from now.
+
+When your latest reading is from today, both are measured on the same day, so they are the same number. When your latest reading is older, the glance number is bigger or smaller, because it also counts the days since that reading. Each day that passes adds one more day of allowance (about 33 miles a day on a 12,000 mile lease) and you have not driven it yet, so a fresh reading is always the way to sharpen it.
+
+The other tiles:
+
+- **Remaining**: miles left before the odometer reaches the limit.
+- **Your pace**: your miles a day since the lease started.
+- **To stay under**: the miles a day you can drive from here to finish at the limit.
+- **Projected end**: where the odometer lands on the last day if you keep your current pace, and how far over or under the limit that is.
+- **Projected fee**: only with the overage option on. Miles over the limit times your rate.
+- **Miles used**: miles driven since delivery, out of the total allowed.
 
 ## How the allowance is counted
 

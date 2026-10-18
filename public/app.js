@@ -563,8 +563,8 @@
     var node = el('div', { class: 'card glance ' + (over ? 'over' : 'under') }, [
       el('p', { class: 'label', text: 'At a glance' }),
       el('div', { class: 'glance-main' }, [
-        el('div', {}, [el('div', { class: 'big', text: fmt(g.can_drive_week) }), el('div', { class: 'n', text: 'miles you can drive this week' })]),
-        el('div', {}, [el('div', { class: 'mid', text: fmt(g.can_drive_today) }), el('div', { class: 'n', text: 'by the end of today' })])
+        el('div', {}, [el('div', { class: 'big', text: fmt(g.can_drive_week) }), el('div', { class: 'n', text: 'you can drive by the end of the week' })]),
+        el('div', {}, [el('div', { class: 'mid', text: fmt(g.can_drive_today) }), el('div', { class: 'n', text: 'you can still drive today' })])
       ]),
       el('p', { class: 'glance-status' }, [el('strong', { text: head }), ' ' + sub]),
       g.days_since_reading !== null && g.days_since_reading > 3 ? el('p', { class: 'note', text: 'Based on the reading from ' + longDate(g.reading_date) + '. A fresh one sharpens this.' }) : null
@@ -702,7 +702,7 @@
     var pastLimit = b.miles_remaining < 0;
     var projOver = b.projected_vs_limit > 0;
     card.appendChild(el('div', { class: 'hero-status ' + (over ? 'over' : under ? 'under' : '') }, [
-      el('p', { class: 'label', text: 'as of ' + longDate(b.date) }),
+      el('p', { class: 'label', text: b.date === s.today ? 'at today\u2019s reading' : 'at your last reading, ' + longDate(b.date) }),
       el('div', { class: 'huge', text: fmt(Math.abs(b.miles_over_pace)) }),
       el('div', { class: 'huge-sub', text: b.miles_over_pace === 0 ? 'miles, right on pace' : 'miles ' + (over ? 'over' : 'under') + ' pace' }),
       el('p', { class: 'hero-note', text: 'You are at ' + fmt(b.odometer) + '. On pace would be ' + fmt(b.on_pace_odometer) + '.' })
