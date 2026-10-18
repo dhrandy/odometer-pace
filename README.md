@@ -119,16 +119,17 @@ curl -X POST https://your-host/api/v1/readings \
 
 ### Instructions to give your AI assistant
 
-Paste this into your assistant's instructions or memory. Replace the two placeholders first. Keep the real key out of anything that gets shared or saved to a public place.
+Paste this into your assistant's instructions or memory. Replace YOUR-HOST with your address. Do not paste the API key into the instructions or into a chat. Put it in your assistant's secret store, vault or environment variables under the name `ODOMETER_PACE_KEY`, so it can read the key when it makes a call.
 
 ````
 You can keep my car lease mileage up to date through a small API called Odometer Pace.
 
 Base URL: https://YOUR-HOST
-API key: YOUR-KEY
+
+The API key is stored in your secret store, vault or environment as ODOMETER_PACE_KEY. Read it from there each time you make a call. Never ask me for it in chat. If you cannot find it, tell me it is missing and stop.
 
 Send the key on every request as a header:
-Authorization: Bearer YOUR-KEY
+Authorization: Bearer <the value of ODOMETER_PACE_KEY>
 For POST requests also send: Content-Type: application/json
 
 What you can do:
@@ -157,7 +158,7 @@ What you can do:
    HTTP 401 means the key is wrong or revoked. HTTP 429 means too many failed attempts, so wait and tell me.
 
 Rules:
-- Never print, repeat or save the API key anywhere except where I put it for you.
+- Never print, repeat, log or save the API key, and never put it in a message to me or anyone else. Only use it in the Authorization header.
 - Only add a reading when I give you the odometer number or you read it from a photo or screen I showed you. Never guess, estimate or calculate one.
 - Odometer readings are whole miles. If I say "about 12.3k", ask me for the exact number.
 - Before adding, tell me the number and date you are about to save if there is any doubt. After adding, tell me the new pace in one or two sentences: miles over or under pace, and how many miles I have left.
