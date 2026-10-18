@@ -119,6 +119,8 @@ curl -X POST https://your-host/api/v1/readings \
 
 ### Instructions to give your AI assistant
 
+The login page also carries a short version of these instructions as hidden text (not shown, not read out by screen readers), so an assistant that reads the page learns how to use the API. It holds no secrets, and anyone who opens the page can read it. It is not indexed by search engines.
+
 Paste this into your assistant's instructions or memory. Replace the two placeholders first. Keep the real key out of anything that gets shared or saved to a public place.
 
 ````

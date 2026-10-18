@@ -236,3 +236,11 @@ test('an unreadable data file stops the server instead of starting empty', async
   assert.notStrictEqual(r.status, 0);
   assert.strictEqual(fs.readFileSync(path.join(bad, 'odometer-pace.json'), 'utf8'), '{ not json');
 });
+
+test('the login page carries hidden instructions for AI assistants, with nothing private', async () => {
+  const html = await (await fetch(BASE + '/')).text();
+  assert.ok(html.includes('class="ai-note" aria-hidden="true"'));
+  assert.ok(html.includes('/api/v1/readings') && html.includes('Authorization: Bearer'));
+  assert.ok(html.includes('noindex'));
+  assert.ok(!/op_[0-9a-f]{8}/.test(html), 'no key may appear in the page');
+});

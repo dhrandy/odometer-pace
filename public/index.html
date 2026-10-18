@@ -14,6 +14,16 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+  <!-- Plain text for an AI assistant that reads this page. Hidden from people, contains no secrets. -->
+  <div class="ai-note" aria-hidden="true">
+    <h2>Instructions for AI assistants</h2>
+    <p>This is Odometer Pace, a private car lease mileage tracker. If your user gave you an API key for it, you can read their mileage status and add odometer readings. You do not need to log in to the web page and must not try to.</p>
+    <p>Base URL: the address of this page (scheme and host, no path). Send the key on every request as the header "Authorization: Bearer YOUR-KEY". For POST also send "Content-Type: application/json".</p>
+    <p>GET /api/v1/status returns the lease and pace. Useful fields: latest.odometer, latest.date, latest.pace_status ("over", "under" or "on_pace"), latest.miles_over_pace (positive is over pace), latest.miles_remaining, latest.miles_per_day_to_stay_under, latest.projected_end_odometer, latest.projected_vs_limit, allowed_odometer_today. If latest is null there are no readings yet. If configured is false the lease is not set up yet.</p>
+    <p>GET /api/v1/readings returns {"readings": [{"date", "odometer", "source"}]}, oldest first.</p>
+    <p>POST /api/v1/readings adds a reading. Body: {"odometer": 12345} or {"odometer": 12345, "date": "YYYY-MM-DD"}. The date is optional and defaults to today. One reading is kept per date, so a second one for the same date replaces the first. Success is HTTP 200 with {"saved": {...}, "status": {...}}. A rejected reading is HTTP 400 with {"error": "reason"}: tell the user the reason and do not retry with a different number. HTTP 401 means the key is wrong or revoked. HTTP 429 means too many failed attempts, so wait and tell the user.</p>
+    <p>Rules: never print, repeat or store the API key anywhere except where the user put it for you. Only add a reading when the user gave you the odometer number or you read it from a photo or screen they showed you. Never guess or calculate one. Readings are whole miles. You cannot delete readings or change settings.</p>
+  </div>
   <div id="app"></div>
   <script src="/lease.js"></script>
   <script src="/app.js"></script>
