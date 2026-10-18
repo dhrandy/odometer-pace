@@ -209,12 +209,13 @@ Nothing shows when you are on or under pace. The level comes from your latest re
 
 ## Optional features
 
-Settings has an **Optional features** card. Everything in it is off until the admin turns it on.
+Settings has an **Optional features** card. Everything in it is off until the admin turns it on, except History, which starts on.
 
 - **Overage cost**: set the dollars per mile your lease charges over the limit. Shows the projected fee at turn-in next to the projection.
 - **Trip what-if**: type the miles of a planned trip to see how it changes the projected end odometer, the fee and the miles per day to stay under. The trip is added on top of what you already drive.
 - **Glance view**: a card at the top with the miles you can drive this week and by the end of today and still be on pace, amber when over and your accent color when on track. It also turns on `GET /api/v1/glance`, a small read-only endpoint for widgets.
-- **Export and backup**: download readings as CSV, or a JSON backup of lease settings and readings. Restore from a backup file in the same card. Backups never contain logins or API keys.
+- **History**: a clock button in the header opens a page that lists every reading that was entered, newest first: the odometer value, the date it is for, the value it replaced (if any), when it was saved, and who entered it. A person shows by name. An AI or script shows as `AI/API` with the key name and the key owner. Deleted readings are logged too. Every login can see it. Turn it off here and the button and page go away (the log keeps recording).
+- **Export and backup**: download readings and history as CSV, or a JSON backup of lease settings, readings and history. Restore from a backup file in the same card. Backups never contain logins or API keys.
 
 ### Home Assistant sensor
 

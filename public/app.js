@@ -44,6 +44,7 @@
   var ICONS = {
     gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
     logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
+    history: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     back: '<path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>',
     trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
     today: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3"/><path d="M12 19v3"/><path d="M2 12h3"/><path d="M19 12h3"/>',
@@ -147,7 +148,8 @@
       ['overage', 'Overage cost', 'Shows what the miles past the limit would cost at turn-in.'],
       ['whatif', 'Trip what-if', 'A small calculator for how a planned trip changes your projection.'],
       ['glance', 'Glance view', 'A card at the top with the miles you can drive today and this week, and a read-only /api/v1/glance for widgets and Home Assistant.'],
-      ['backup', 'Export and backup', 'Download your readings as CSV, or a full backup you can restore later.']
+      ['history', 'History', 'A page listing every reading that was entered, when, and by whom (a person, or an AI or API key). Starts on.'],
+      ['backup', 'Export and backup', 'Download your readings and history as CSV, or a full backup you can restore later.']
     ];
     var boxes = {};
     var rate = el('input', { type: 'number', inputmode: 'decimal', min: '0', max: '10', step: 'any', placeholder: 'Dollars per mile over, e.g. 0.25' });
@@ -155,19 +157,19 @@
     var msg = el('p', { class: 'err', role: 'status' });
     var rows = names.map(function (n) {
       var cb = el('input', { type: 'checkbox' });
-      cb.checked = o[n[0]] === true;
+      cb.checked = n[0] === 'history' ? o.history !== false : o[n[0]] === true;
       boxes[n[0]] = cb;
       return el('div', { class: 'opt' }, [el('label', { class: 'check' }, [cb, n[1]]), el('p', { class: 'note', text: n[2] })]);
     });
     var box = el('div', { class: 'card' }, [
       el('h2', { text: 'Optional features' }),
-      el('p', { class: 'sub', text: 'All off by default. Turn on only what you want to see.' })
+      el('p', { class: 'sub', text: 'Off by default, except History. Turn on only what you want to see.' })
     ].concat(rows, [
       el('label', { class: 'field' }, ['Overage rate (used by Overage cost and Trip what-if)', rate]),
       el('div', { class: 'spacer' }),
       el('button', { class: 'btn', type: 'button', text: 'Save', onclick: function () {
         msg.className = 'err'; msg.textContent = '';
-        api('PUT', '/api/options', { overage: boxes.overage.checked, whatif: boxes.whatif.checked, glance: boxes.glance.checked, backup: boxes.backup.checked, overageRate: rate.value })
+        api('PUT', '/api/options', { overage: boxes.overage.checked, whatif: boxes.whatif.checked, glance: boxes.glance.checked, backup: boxes.backup.checked, history: boxes.history.checked, overageRate: rate.value })
           .then(function (st) { status = st; msg.className = 'err ok'; msg.textContent = 'Saved.'; renderSettings(false); })
           .catch(function (x) { msg.textContent = x.message; });
       } }),
@@ -192,9 +194,10 @@
       box.appendChild(el('h3', { class: 'minor', text: 'Export and backup' }));
       box.appendChild(el('p', { class: 'row' }, [
         el('a', { class: 'btn quiet btn-link', href: '/api/export.csv', download: 'odometer-readings.csv', text: 'Download CSV' }), ' ',
+        el('a', { class: 'btn quiet btn-link', href: '/api/history.csv', download: 'odometer-history.csv', text: 'History CSV' }), ' ',
         el('a', { class: 'btn quiet btn-link', href: '/api/backup', download: 'odometer-pace-backup.json', text: 'Download backup' })
       ]));
-      box.appendChild(el('p', { class: 'note', text: 'The backup holds your lease settings and readings, not logins or API keys.' }));
+      box.appendChild(el('p', { class: 'note', text: 'The backup holds your lease settings, readings and history, not logins or API keys.' }));
       box.appendChild(el('label', { class: 'field' }, ['Restore from a backup file', file]));
       box.appendChild(rmsg);
     }
@@ -462,6 +465,31 @@
     ]);
   }
 
+  // Every reading that was entered, newest first, and who entered it.
+  function renderHistory() {
+    var list = el('ul', { class: 'log hist' });
+    var msg = el('p', { class: 'err', role: 'status' });
+    api('GET', '/api/history').then(function (r) {
+      if (!r.history.length) list.appendChild(el('li', {}, ['Nothing has been entered yet.']));
+      r.history.forEach(function (h) {
+        var when = h.at ? new Date(h.at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'earlier';
+        var what = h.deleted ? 'Deleted ' + fmt(h.odometer) + ' mi' : fmt(h.odometer) + ' mi';
+        var more = ' for ' + longDate(h.date) + (!h.deleted && h.previous !== null && h.previous !== undefined ? ', replaced ' + fmt(h.previous) : '');
+        var who = h.by === 'api'
+          ? [el('span', { class: 'tag', text: 'AI/API' }), ' ' + h.name + (h.owner ? ' (' + h.owner + ')' : '')]
+          : [h.name];
+        list.appendChild(el('li', {}, [el('div', {}, [
+          el('div', {}, [el('strong', { text: what }), more]),
+          el('div', { class: 'src hist-meta' }, [when + ' \u00b7 '].concat(who))
+        ])]));
+      });
+    }).catch(function (x) { msg.textContent = x.message; });
+    show(el('div', { class: 'wrap top' }, [
+      el('div', { class: 'card' }, [el('h2', { text: 'History' }), el('p', { class: 'sub', text: 'Every reading that was entered, newest first.' }), list, msg]),
+      el('p', {}, [iconBtn('back', 'Back', boot, 'quiet')])
+    ]));
+  }
+
   function renderMain() {
     var s = status, L = s.lease;
     var plan = Lease.makePlan({ startDate: L.start_date, years: L.years, totalMiles: L.total_miles, startOdometer: L.start_odometer });
@@ -470,6 +498,7 @@
       el('div', { class: 'topbar' }, [
         brandBlock(),
         el('nav', {}, [
+          (s.options && s.options.history !== false) ? iconBtn('history', 'History', renderHistory, 'on-hero') : null,
           iconBtn('gear', 'Settings', function () { renderSettings(false); }, 'on-hero'),
           iconBtn('logout', 'Log out', logout, 'on-hero')
         ])

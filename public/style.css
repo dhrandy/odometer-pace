@@ -245,3 +245,6 @@ html[data-oled="true"] .day.past { background: #08080a; }
 html[data-accent="orange"] .stat.over, html[data-accent="orange"] .alert, html[data-accent="orange"] .glance.over, html[data-accent="orange"] .confirm {
   background-image: repeating-linear-gradient(135deg, rgba(253,224,71,.13) 0 6px, transparent 6px 12px);
 }
+.hist .src { margin-left: 0; }
+.hist-meta { margin-top: 2px; }
+.tag { display: inline-block; border: 1px solid var(--muted); border-radius: 6px; padding: 0 5px; font-size: .72rem; letter-spacing: .04em; }

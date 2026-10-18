@@ -32,12 +32,37 @@ if (require.main === module) dropRoot();
 
 
 function emptyData() {
-  return { settings: null, readings: [], tokens: [], auth: null, users: [], sessions: [], ui: { accent: 'purple', oled: false }, options: { overage: false, whatif: false, glance: false, backup: false, overageRate: null } };
+  return { settings: null, readings: [], history: [], tokens: [], auth: null, users: [], sessions: [], ui: { accent: 'purple', oled: false }, options: { overage: false, whatif: false, glance: false, backup: false, overageRate: null, history: true } };
+}
+
+// The history log. Older readings that predate it are listed once, from what was stored with them.
+function whoFromSource(src) {
+  const t = String(src || '');
+  const m = /^api:(.*?)(?: \((.*)\))?$/.exec(t);
+  if (m) return { by: 'api', name: m[1], owner: m[2] || null };
+  return { by: 'person', name: t.indexOf('web:') === 0 ? t.slice(4) : (t || 'unknown'), owner: null };
+}
+function seedHistory(readings) {
+  return (readings || []).slice().sort((a, b) => ((a.saved || '') < (b.saved || '') ? -1 : 1)).map((r) =>
+    Object.assign({ at: r.saved || null, date: r.date, odometer: r.odometer, previous: null, deleted: false }, whoFromSource(r.source)));
+}
+function logHistory(entry) {
+  data.history.push(entry);
+  if (data.history.length > 5000) data.history = data.history.slice(-5000);
+}
+function historyList() {
+  return data.history.slice().reverse();
+}
+function historyCsv() {
+  return 'saved,date,odometer,previous,by,name,owner,deleted\n' + data.history.map((h) => [h.at, h.date, h.odometer, h.previous === null || h.previous === undefined ? '' : h.previous, h.by, h.name, h.owner || '', h.deleted ? 'yes' : ''].map(csvCell).join(',')).join('\n') + '\n';
 }
 
 function loadData() {
   try {
-    return Object.assign(emptyData(), JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')));
+    const raw = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+    const d = Object.assign(emptyData(), raw);
+    if (!Array.isArray(raw.history)) d.history = seedHistory(d.readings);
+    return d;
   } catch (e) {
     if (e.code === 'ENOENT') return emptyData();
     // Never start empty over a file we could not read: the next save would overwrite it.
@@ -212,12 +237,14 @@ function optionsBody() {
   const out = {};
   FEATURES.forEach((k) => { out[k] = o[k] === true; });
   out.overageRate = Number(o.overageRate) > 0 ? Number(o.overageRate) : null;
+  out.history = o.history !== false; // a log, so it starts on
   return out;
 }
 // Returns the cleaned options, or null when the rate is not a number from 0 to 10.
 function cleanOptions(b) {
   const out = {};
   FEATURES.forEach((k) => { out[k] = b[k] === true; });
+  out.history = b.history !== false;
   const raw = String(b.overageRate === undefined || b.overageRate === null ? '' : b.overageRate).trim().replace(/^\$/, '');
   if (raw === '') out.overageRate = null;
   else if (isFinite(Number(raw)) && Number(raw) >= 0 && Number(raw) <= 10) out.overageRate = Number(raw) > 0 ? Math.round(Number(raw) * 10000) / 10000 : null;
@@ -251,8 +278,21 @@ function parseBackup(b) {
     if (readings.some((x) => x.date === date)) return { error: 'The date ' + date + ' appears twice.' };
     readings.push({ date: date, odometer: odometer, source: String((r && r.source) || 'restore').slice(0, 60), saved: new Date().toISOString() });
   }
-  const options = cleanOptions(b.options || {}) || { overage: false, whatif: false, glance: false, backup: false, overageRate: null };
-  return { settings: settings, readings: readings, options: options };
+  const options = cleanOptions(b.options || {}) || { overage: false, whatif: false, glance: false, backup: false, overageRate: null, history: true };
+  let history;
+  if (Array.isArray(b.history)) {
+    history = b.history.slice(-5000).map((h) => ({
+      at: h && typeof h.at === 'string' ? h.at.slice(0, 40) : null,
+      date: String((h && h.date) || '').slice(0, 10),
+      odometer: Number(h && h.odometer) || 0,
+      previous: h && h.previous !== null && h.previous !== undefined && isFinite(Number(h.previous)) ? Number(h.previous) : null,
+      deleted: !!(h && h.deleted),
+      by: h && h.by === 'api' ? 'api' : 'person',
+      name: String((h && h.name) || '').slice(0, 60),
+      owner: h && h.owner ? String(h.owner).slice(0, 60) : null
+    }));
+  } else history = seedHistory(readings);
+  return { settings: settings, readings: readings, options: options, history: history };
 }
 
 // Clean JSON for the page and for agents.
@@ -331,7 +371,9 @@ function addReading(date, odometer, source) {
   if (err) return { error: err };
   const old = data.readings.find((r) => r.date === date);
   const previous = old ? { date: old.date, odometer: old.odometer } : null;
-  data.readings = others.concat([{ date: date, odometer: odometer, source: source, saved: new Date().toISOString() }]);
+  const at = new Date().toISOString();
+  data.readings = others.concat([{ date: date, odometer: odometer, source: source, saved: at }]);
+  logHistory(Object.assign({ at: at, date: date, odometer: odometer, previous: previous ? previous.odometer : null, deleted: false }, whoFromSource(source)));
   saveData();
   return { previous: previous };
 }
@@ -472,10 +514,20 @@ async function handleApi(req, res, url) {
     res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="odometer-readings.csv"', 'Cache-Control': 'no-store' });
     return res.end(readingsCsv());
   }
+  if (p === '/api/history' && method === 'GET') {
+    if (!optionsBody().history) return sendJson(res, 404, { error: 'History is turned off in Settings.' });
+    return sendJson(res, 200, { history: historyList() });
+  }
+  if (p === '/api/history.csv' && method === 'GET') {
+    if (!isAdmin) return adminOnly();
+    if (!optionsBody().backup) return sendJson(res, 404, { error: 'Export is turned off in Settings.' });
+    res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="odometer-history.csv"', 'Cache-Control': 'no-store' });
+    return res.end(historyCsv());
+  }
   if (p === '/api/backup' && method === 'GET') {
     if (!isAdmin) return adminOnly();
     if (!optionsBody().backup) return sendJson(res, 404, { error: 'Backup is turned off in Settings.' });
-    const file = { app: 'odometer-pace', version: 1, exported: new Date().toISOString(), settings: data.settings, options: optionsBody(), readings: sortedReadings().map((r) => ({ date: r.date, odometer: r.odometer, source: r.source || 'web' })) };
+    const file = { app: 'odometer-pace', version: 1, exported: new Date().toISOString(), settings: data.settings, options: optionsBody(), readings: sortedReadings().map((r) => ({ date: r.date, odometer: r.odometer, source: r.source || 'web' })), history: data.history };
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': 'attachment; filename="odometer-pace-backup.json"', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify(file, null, 2));
   }
@@ -488,6 +540,7 @@ async function handleApi(req, res, url) {
     if (r.error) return sendJson(res, 400, { error: r.error });
     data.settings = r.settings;
     data.readings = r.readings;
+    data.history = r.history;
     data.options = r.options;
     saveData();
     return sendJson(res, 200, statusBody());
@@ -521,7 +574,9 @@ async function handleApi(req, res, url) {
   const del = /^\/api\/readings\/(\d{4}-\d{2}-\d{2})$/.exec(p);
   if (del && method === 'DELETE') {
     if (!isAdmin) return adminOnly();
+    const gone = data.readings.find((r) => r.date === del[1]);
     data.readings = data.readings.filter((r) => r.date !== del[1]);
+    if (gone) logHistory({ at: new Date().toISOString(), date: gone.date, odometer: gone.odometer, previous: null, deleted: true, by: 'person', name: me.username, owner: null });
     saveData();
     return sendJson(res, 200, statusBody());
   }

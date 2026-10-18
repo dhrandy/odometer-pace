@@ -130,3 +130,63 @@ test('the page has a GitHub footer link and the new cards', async () => {
   assert.ok(js.includes('https://github.com/dhrandy/odometer-pace') && js.includes('noopener'));
   assert.ok(js.includes('glanceCard') && js.includes('whatIfCard') && js.includes('featuresCard'));
 });
+
+test('history lists who entered each reading, person or API key, and replaced values', async () => {
+  const h0 = (await call('GET', '/api/history')).json.history;
+  assert.ok(h0.length >= 2);
+  const d = day(-5);
+  await call('POST', '/api/readings', { date: d, odometer: 2000 });
+  await call('POST', '/api/v1/readings', { date: d, odometer: 2100 }, { Authorization: 'Bearer ' + key, Cookie: '' });
+  const h = (await call('GET', '/api/history')).json.history;
+  assert.strictEqual(h.length, h0.length + 2);
+  assert.strictEqual(h[0].by, 'api');
+  assert.strictEqual(h[0].name, 'Test agent');
+  assert.strictEqual(h[0].owner, 'admin1');
+  assert.strictEqual(h[0].odometer, 2100);
+  assert.strictEqual(h[0].previous, 2000);
+  assert.strictEqual(h[1].by, 'person');
+  assert.strictEqual(h[1].name, 'admin1');
+  assert.strictEqual(h[1].previous, null);
+  const del = await call('DELETE', '/api/readings/' + d, {});
+  assert.strictEqual(del.status, 200, del.text);
+  const h2 = (await call('GET', '/api/history')).json.history;
+  assert.strictEqual(h2[0].deleted, true);
+});
+
+test('history needs a login, a user sees it too, and the API key cannot read it', async () => {
+  assert.strictEqual((await call('GET', '/api/history', undefined, { Cookie: '' })).status, 401);
+  assert.strictEqual((await agent('/api/history')).status, 401);
+  const mine = cookie;
+  await call('POST', '/api/users', { username: 'helper1', password: 'long-enough-2' });
+  await call('POST', '/api/login', { username: 'helper1', password: 'long-enough-2' });
+  assert.strictEqual((await call('GET', '/api/history')).status, 200);
+  assert.strictEqual((await call('GET', '/api/history.csv')).status, 403);
+  cookie = mine;
+});
+
+test('history can be hidden in Settings and starts on', async () => {
+  const st = (await call('GET', '/api/status')).json;
+  assert.strictEqual(st.options.history, true);
+  const o = Object.assign({}, st.options, { history: false });
+  await call('PUT', '/api/options', o);
+  assert.strictEqual((await call('GET', '/api/history')).status, 404);
+  assert.strictEqual((await call('GET', '/api/status')).json.options.history, false);
+  await call('PUT', '/api/options', Object.assign({}, o, { history: true }));
+  assert.strictEqual((await call('GET', '/api/history')).status, 200);
+});
+
+test('backup and CSV carry the history and restore brings it back', async () => {
+  const b = (await call('GET', '/api/backup')).json;
+  assert.ok(Array.isArray(b.history) && b.history.length > 2);
+  const csv = await call('GET', '/api/history.csv');
+  assert.strictEqual(csv.status, 200);
+  assert.strictEqual(csv.text.split('\n')[0], 'saved,date,odometer,previous,by,name,owner,deleted');
+  const n = b.history.length;
+  await call('POST', '/api/readings', { date: day(-3), odometer: 3000 });
+  assert.strictEqual((await call('POST', '/api/restore', b)).status, 200);
+  assert.strictEqual((await call('GET', '/api/history')).json.history.length, n);
+  const old = JSON.parse(JSON.stringify(b)); delete old.history;
+  assert.strictEqual((await call('POST', '/api/restore', old)).status, 200);
+  const seeded = (await call('GET', '/api/history')).json.history;
+  assert.strictEqual(seeded.length, old.readings.length);
+});
