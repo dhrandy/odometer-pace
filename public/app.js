@@ -425,21 +425,22 @@
       return card;
     }
     var over = b.miles_over_pace > 0;
+    var under = b.miles_over_pace < 0;
     var pastLimit = b.miles_remaining < 0;
     var projOver = b.projected_vs_limit > 0;
-    card.appendChild(el('p', { class: 'verdict' + (over ? ' over' : '') }, [
+    card.appendChild(el('p', { class: 'verdict' + (over ? ' over' : under ? ' under' : '') }, [
       b.miles_over_pace === 0 ? 'Right on pace' : fmt(Math.abs(b.miles_over_pace)) + ' mi ' + (over ? 'over' : 'under') + ' pace',
       ' ', el('small', { text: 'as of ' + longDate(b.date) })
     ]));
     var stats = el('div', { class: 'stats' }, [
       stat('Your reading', fmt(b.odometer), longDate(b.date)),
       stat('On pace', fmt(b.on_pace_odometer), 'odometer you should be at'),
-      stat(over ? 'Over pace' : 'Under pace', (over ? '+' : '') + fmt(b.miles_over_pace), 'miles vs on-pace odometer', over ? 'over' : ''),
+      stat(over ? 'Over pace' : 'Under pace', (over ? '+' : '') + fmt(b.miles_over_pace), 'miles vs on-pace odometer', over ? 'over' : under ? 'under' : ''),
       stat('Remaining', fmt(b.miles_remaining), 'to the ' + fmt(s.lease.odometer_limit) + ' limit' + (pastLimit ? ' (past it)' : ''), pastLimit ? 'over' : ''),
       stat('Your pace', fmt1(b.miles_per_day_so_far) + '/day', 'since the lease started'),
       b.miles_per_day_to_stay_under === null ? null : stat('To stay under', fmt1(b.miles_per_day_to_stay_under) + '/day', 'for the days that are left'),
       stat('Projected at end', b.projected_end_odometer === null ? 'n/a' : fmt(b.projected_end_odometer),
-        b.projected_vs_limit === null ? '' : (projOver ? fmt(b.projected_vs_limit) + ' over' : fmt(-b.projected_vs_limit) + ' under') + ' the limit', projOver ? 'over' : ''),
+        b.projected_vs_limit === null ? '' : (projOver ? fmt(b.projected_vs_limit) + ' over' : fmt(-b.projected_vs_limit) + ' under') + ' the limit', projOver ? 'over' : b.projected_vs_limit === null ? '' : 'under'),
       stat('Miles used', fmt(b.miles_used), 'of ' + fmt(s.lease.total_miles) + ' allowed')
     ]);
     card.appendChild(stats);

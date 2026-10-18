@@ -1,6 +1,6 @@
 {
   "name": "odometer-pace",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "A self-hosted lease mileage calendar and odometer log.",
   "license": "MIT",
   "private": true,
