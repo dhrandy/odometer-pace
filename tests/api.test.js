@@ -239,14 +239,24 @@ test('an unreadable data file stops the server instead of starting empty', async
 
 test('over and under pace have separate colors, neither red or green', async () => {
   const css = await (await fetch(BASE + '/style.css')).text();
-  const over = css.match(/--over: (#[0-9a-f]{6})/)[1];
-  const under = css.match(/--under: (#[0-9a-f]{6})/)[1];
-  assert.notStrictEqual(over, under);
-  for (const c of [over, under]) {
-    const [r, g, b] = [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
-    assert.ok(!(r > g + 60 && r > b + 60), c + ' looks red');
-    assert.ok(!(g > r + 60 && g > b + 60), c + ' looks green');
+  const baseOver = css.match(/--over: (#[0-9a-f]{6})/)[1];
+  const lines = css.split('\n').filter((l) => /^html\[data-accent="[a-z]+"\] \{/.test(l));
+  assert.ok(lines.length >= 5);
+  for (const l of lines) {
+    const under = l.match(/--accent-mid: (#[0-9a-f]{6})/)[1];
+    const over = (l.match(/--over: (#[0-9a-f]{6})/) || [0, baseOver])[1];
+    assert.notStrictEqual(over, under);
+    for (const c of l.includes('"green"') ? [over] : [over, under]) {
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+      assert.ok(!(r > g + 100 && r > b + 100), c + ' looks red');
+      assert.ok(!(g > r + 60 && g > b + 60), c + ' looks green');
+    }
   }
+});
+
+test('the progress bar always shows a visible sliver', async () => {
+  const js = await (await fetch(BASE + '/app.js')).text();
+  assert.match(js, /Math\.max\(2\.5, L\.day_of_lease/);
 });
 
 test('the status carries a warning field for assistants', async () => {

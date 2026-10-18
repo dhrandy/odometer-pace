@@ -166,12 +166,12 @@ pre code { padding: 0; background: none; }
 .hero { background: linear-gradient(135deg, var(--hero-top) 0%, color-mix(in srgb, var(--accent-strong) 40%, var(--hero-top)) 100%); }
 
 /* Accent colors. Purple is the default set in :root. Under pace and on track use the accent, over pace is the one amber second color.
-   Orange is too close to amber, so under pace uses a light neutral there. */
+   Orange is too close to amber, so on orange only, over pace is a brighter yellow with a diagonal stripe on its tiles. */
 html[data-accent="blue"] { --accent: #60a5fa; --accent-strong: #2563eb; --accent-strong-hover: #1d4ed8; --accent-mid: #93c5fd; --accent-rgb: 147,197,253; }
 html[data-accent="cyan"] { --accent: #22d3ee; --accent-strong: #0e7490; --accent-strong-hover: #155e75; --accent-mid: #67e8f9; --accent-rgb: 103,232,249; }
 html[data-accent="green"] { --accent: #4ade80; --accent-strong: #15803d; --accent-strong-hover: #166534; --accent-mid: #86efac; --accent-rgb: 134,239,172; }
 html[data-accent="pink"] { --accent: #f472b6; --accent-strong: #be185d; --accent-strong-hover: #9d174d; --accent-mid: #f9a8d4; --accent-rgb: 249,168,212; }
-html[data-accent="orange"] { --under: #e4e4e7; --under-soft: #323237; --accent: #fb923c; --accent-strong: #c2410c; --accent-strong-hover: #9a3412; --accent-mid: #fdba74; --accent-rgb: 253,186,116; }
+html[data-accent="orange"] { --over: #fde047; --over-soft: #3b3410; --accent: #fb923c; --accent-strong: #c2410c; --accent-strong-hover: #9a3412; --accent-mid: #fdba74; --accent-rgb: 253,186,116; }
 
 /* True black for OLED screens. */
 html[data-oled="true"] { --bg: #000; --card: #0b0b0d; --raised: #17171b; --line: #2a2a30; --hero-top: #000; }
@@ -242,3 +242,6 @@ html[data-oled="true"] .day.past { background: #08080a; }
 .login-brand .brand { font-size: 1rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
 .login-brand .tagline { color: var(--muted); opacity: 1; }
 .logo-mark .dot { fill: var(--accent-mid); }
+html[data-accent="orange"] .stat.over, html[data-accent="orange"] .alert, html[data-accent="orange"] .glance.over, html[data-accent="orange"] .confirm {
+  background-image: repeating-linear-gradient(135deg, rgba(253,224,71,.13) 0 6px, transparent 6px 12px);
+}

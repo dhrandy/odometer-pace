@@ -557,7 +557,7 @@
       fill.style.width = '100%';
     } else {
       line = 'Day ' + fmt(L.day_of_lease) + ' of ' + fmt(L.days_total) + '. Allowed so far: ' + fmt(s.allowed_odometer_today - L.start_odometer) + ' miles.';
-      fill.style.width = (L.day_of_lease / L.days_total * 100) + '%';
+      fill.style.width = Math.max(2.5, L.day_of_lease / L.days_total * 100) + '%'; // always a visible sliver
       left = fmt(L.days_total - L.day_of_lease) + ' days left';
       right = 'on-pace odometer today: ' + fmt(s.allowed_odometer_today);
     }
