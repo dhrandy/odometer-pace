@@ -116,12 +116,12 @@ test('backup downloads without secrets and restores a clean copy', async () => {
   await call('DELETE', '/api/readings/' + day(-1));
   const restored = await call('POST', '/api/restore', file);
   assert.strictEqual(restored.status, 200);
-  assert.strictEqual(restored.json.readings.length, file.readings.length);
+  assert.strictEqual(restored.json.readings.length, file.vehicles[0].readings.length);
   const bad = JSON.parse(JSON.stringify(file));
-  bad.readings.push({ date: day(-50), odometer: 99999 });
+  bad.vehicles[0].readings.push({ date: day(-50), odometer: 99999 });
   const refused = await call('POST', '/api/restore', bad);
   assert.strictEqual(refused.status, 400);
-  assert.strictEqual((await call('GET', '/api/status')).json.readings.length, file.readings.length);
+  assert.strictEqual((await call('GET', '/api/status')).json.readings.length, file.vehicles[0].readings.length);
   assert.strictEqual((await call('POST', '/api/restore', { app: 'other' })).status, 400);
 });
 
@@ -177,18 +177,19 @@ test('history can be hidden in Settings and starts on', async () => {
 
 test('backup and CSV carry the history and restore brings it back', async () => {
   const b = (await call('GET', '/api/backup')).json;
-  assert.ok(Array.isArray(b.history) && b.history.length > 2);
+  assert.strictEqual(b.version, 2);
+  assert.ok(Array.isArray(b.vehicles[0].history) && b.vehicles[0].history.length > 2);
   const csv = await call('GET', '/api/history.csv');
   assert.strictEqual(csv.status, 200);
   assert.strictEqual(csv.text.split('\n')[0], 'saved,date,odometer,previous,by,name,owner,deleted');
-  const n = b.history.length;
+  const n = b.vehicles[0].history.length;
   await call('POST', '/api/readings', { date: day(-3), odometer: 3000 });
   assert.strictEqual((await call('POST', '/api/restore', b)).status, 200);
   assert.strictEqual((await call('GET', '/api/history')).json.history.length, n);
-  const old = JSON.parse(JSON.stringify(b)); delete old.history;
+  const old = JSON.parse(JSON.stringify(b)); delete old.vehicles[0].history;
   assert.strictEqual((await call('POST', '/api/restore', old)).status, 200);
   const seeded = (await call('GET', '/api/history')).json.history;
-  assert.strictEqual(seeded.length, old.readings.length);
+  assert.strictEqual(seeded.length, old.vehicles[0].readings.length);
 });
 
 test('the same value for the same date changes nothing and adds no history', async () => {

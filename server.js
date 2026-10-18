@@ -31,8 +31,12 @@ function dropRoot() {
 if (require.main === module) dropRoot();
 
 
+function newCar(settings) {
+  return { id: crypto.randomBytes(3).toString('hex'), settings: settings || null, readings: [], history: [], archived: false };
+}
+
 function emptyData() {
-  return { settings: null, readings: [], history: [], tokens: [], auth: null, users: [], sessions: [], ui: { accent: 'purple', oled: false }, options: { overage: false, whatif: false, glance: false, backup: false, overageRate: null, history: true } };
+  return { vehicles: [newCar(null)], tokens: [], auth: null, users: [], sessions: [], ui: { accent: 'purple', oled: false }, options: { overage: false, whatif: false, glance: false, backup: false, overageRate: null, history: true } };
 }
 
 // The history log. Older readings that predate it are listed once, from what was stored with them.
@@ -46,22 +50,29 @@ function seedHistory(readings) {
   return (readings || []).slice().sort((a, b) => ((a.saved || '') < (b.saved || '') ? -1 : 1)).map((r) =>
     Object.assign({ at: r.saved || null, date: r.date, odometer: r.odometer, previous: null, deleted: false }, whoFromSource(r.source)));
 }
-function logHistory(entry) {
-  data.history.push(entry);
-  if (data.history.length > 5000) data.history = data.history.slice(-5000);
+function logHistory(car, entry) {
+  car.history.push(entry);
+  if (car.history.length > 5000) car.history = car.history.slice(-5000);
 }
-function historyList() {
-  return data.history.slice().reverse();
+function historyList(car) {
+  return car.history.slice().reverse();
 }
-function historyCsv() {
-  return 'saved,date,odometer,previous,by,name,owner,deleted\n' + data.history.map((h) => [h.at, h.date, h.odometer, h.previous === null || h.previous === undefined ? '' : h.previous, h.by, h.name, h.owner || '', h.deleted ? 'yes' : ''].map(csvCell).join(',')).join('\n') + '\n';
+function historyCsv(car) {
+  return 'saved,date,odometer,previous,by,name,owner,deleted\n' + car.history.map((h) => [h.at, h.date, h.odometer, h.previous === null || h.previous === undefined ? '' : h.previous, h.by, h.name, h.owner || '', h.deleted ? 'yes' : ''].map(csvCell).join(',')).join('\n') + '\n';
 }
 
 function loadData() {
   try {
     const raw = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
     const d = Object.assign(emptyData(), raw);
-    if (!Array.isArray(raw.history)) d.history = seedHistory(d.readings);
+    if (!Array.isArray(raw.vehicles) || !raw.vehicles.length) {
+      // Files from before multiple vehicles hold one car at the top. It becomes car one.
+      const car = newCar(raw.settings || null);
+      car.readings = Array.isArray(raw.readings) ? raw.readings : [];
+      car.history = Array.isArray(raw.history) ? raw.history : seedHistory(car.readings);
+      d.vehicles = [car];
+    }
+    delete d.settings; delete d.readings; delete d.history;
     return d;
   } catch (e) {
     if (e.code === 'ENOENT') return emptyData();
@@ -169,7 +180,7 @@ function currentUser(req) {
   const session = data.sessions.find((x) => x.hash === hash && x.expires > now);
   if (!session) return null;
   const user = data.users.find((u) => u.id === session.userId);
-  return user ? { id: user.id, username: user.username, role: user.role } : null;
+  return user ? { id: user.id, username: user.username, role: user.role, access: user.access } : null;
 }
 
 function startSession(userId) {
@@ -223,15 +234,75 @@ function tokenFromRequest(req) {
 
 // ---------- lease views ----------
 
-function sortedReadings() {
-  return data.readings.slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+function sortedReadings(car) {
+  return car.readings.slice().sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 
 function round1(n) { return n === null ? null : Math.round(n * 10) / 10; }
 
 
+// ---------- vehicles ----------
+// With Multiple vehicles off, the app only ever shows the first car. Turning it on changes nothing about that car.
+const MAX_CARS = 12;
+function multiOn() { return optionsBody().multi; }
+function activeCars() { return data.vehicles.filter((v) => !v.archived); }
+function canSee(user, car) {
+  if (!user || user.role === 'admin' || user.id === 'proxy') return true;
+  return !Array.isArray(user.access) || user.access.indexOf(car.id) >= 0;
+}
+function visibleCars(me) {
+  const live = activeCars();
+  if (!multiOn()) return live.length ? [live[0]] : [];
+  return live.filter((v) => canSee(me, v));
+}
+// The car this request is about: ?vehicle=ID, else the first one the person can see.
+function pickCar(me, url) {
+  const cars = visibleCars(me);
+  const id = url.searchParams.get('vehicle');
+  if (!id) return cars[0] || null;
+  return cars.find((v) => v.id === id) || null;
+}
+function slug(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30); }
+function carBrief(car) {
+  const plan = Lease.makePlan(car.settings);
+  const out = { id: car.id, name: (car.settings && car.settings.vehicle) || 'Vehicle', archived: !!car.archived, configured: !!plan, state: null, day_of_lease: null, days_total: null, miles_over_pace: null, pace_status: null };
+  if (!plan) return out;
+  const idx = Lease.dayIndex(plan, todayKey());
+  out.state = idx < 0 ? 'not_started' : idx >= plan.dayCount ? 'complete' : 'active';
+  out.day_of_lease = idx < 0 ? 0 : Math.min(idx + 1, plan.dayCount);
+  out.days_total = plan.dayCount;
+  const ev = Lease.evaluate(plan, sortedReadings(car));
+  if (ev) { out.miles_over_pace = ev.diff; out.pace_status = ev.diff > 0 ? 'over' : ev.diff < 0 ? 'under' : 'on_pace'; }
+  return out;
+}
+// What the web app gets: the car's status plus, when Multiple vehicles is on, the list for the picker.
+function statusFor(me, car) {
+  const body = statusBody(car);
+  if (multiOn()) body.vehicles = visibleCars(me).map(carBrief);
+  return body;
+}
+// Settles which car an API key can reach, or says why not.
+function tokenCar(token) {
+  const car = token.vehicleId ? data.vehicles.find((v) => v.id === token.vehicleId) : data.vehicles[0];
+  if (!car) return { status: 404, error: 'That vehicle no longer exists.' };
+  if (car.archived) return { status: 403, error: 'That vehicle is archived.' };
+  if (!multiOn() && car !== activeCars()[0]) return { status: 403, error: 'Multiple vehicles is turned off in Settings.' };
+  const owner = token.ownerId ? data.users.find((u) => u.id === token.ownerId) : null;
+  if (owner && !canSee(owner, car)) return { status: 403, error: 'The login that made this key no longer has access to that vehicle.' };
+  return { car: car };
+}
+// Access for a login: all cars (now and later) or a list. Returns 'all' or an array of real car ids.
+function cleanAccess(b) {
+  if (Array.isArray(b.vehicles) && b.all !== true) {
+    const ids = [];
+    b.vehicles.forEach((id) => { if (data.vehicles.some((v) => v.id === id) && ids.indexOf(id) < 0) ids.push(id); });
+    return ids;
+  }
+  return 'all';
+}
+
 // Optional features. All start OFF and the admin turns each one on in Settings.
-const FEATURES = ['overage', 'whatif', 'glance', 'backup'];
+const FEATURES = ['overage', 'whatif', 'glance', 'backup', 'multi'];
 function optionsBody() {
   const o = data.options || {};
   const out = {};
@@ -258,27 +329,27 @@ function csvCell(v) {
   if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;
   return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
 }
-function readingsCsv() {
-  return 'date,odometer,source\n' + sortedReadings().map((r) => [r.date, r.odometer, r.source || 'web'].map(csvCell).join(',')).join('\n') + '\n';
+function readingsCsv(car) {
+  return 'date,odometer,source\n' + sortedReadings(car).map((r) => [r.date, r.odometer, r.source || 'web'].map(csvCell).join(',')).join('\n') + '\n';
 }
 
-// Checks a backup file. Returns { error } or { settings, readings, options }.
-function parseBackup(b) {
-  if (!b || b.app !== 'odometer-pace' || !b.settings || !Array.isArray(b.readings)) return { error: 'That is not an Odometer Pace backup file.' };
-  if (b.readings.length > 5000) return { error: 'That backup has too many readings.' };
+// Checks one car's part of a backup. Returns { error } or { settings, readings, history }.
+function parseCar(b, label) {
+  const pre = label ? label + ': ' : '';
+  if (!b || !b.settings || !Array.isArray(b.readings)) return { error: pre + 'That is not an Odometer Pace backup file.' };
+  if (b.readings.length > 5000) return { error: pre + 'That backup has too many readings.' };
   const settings = cleanSettings(b.settings);
-  if (!settings || settings === 'plan') return { error: 'The lease settings in that file are not valid.' };
+  if (!settings || settings === 'plan') return { error: pre + 'The lease settings in that file are not valid.' };
   const plan = Lease.makePlan(settings);
   const readings = [];
   for (const r of b.readings) {
     const odometer = Number(r && r.odometer);
     const date = String(r && r.date);
     const err = Lease.checkReading(plan, readings, date, odometer);
-    if (err) return { error: 'Reading ' + date + ': ' + err };
-    if (readings.some((x) => x.date === date)) return { error: 'The date ' + date + ' appears twice.' };
+    if (err) return { error: pre + 'Reading ' + date + ': ' + err };
+    if (readings.some((x) => x.date === date)) return { error: pre + 'The date ' + date + ' appears twice.' };
     readings.push({ date: date, odometer: odometer, source: String((r && r.source) || 'restore').slice(0, 60), saved: new Date().toISOString() });
   }
-  const options = cleanOptions(b.options || {}) || { overage: false, whatif: false, glance: false, backup: false, overageRate: null, history: true };
   let history;
   if (Array.isArray(b.history)) {
     history = b.history.slice(-5000).map((h) => ({
@@ -292,22 +363,46 @@ function parseBackup(b) {
       owner: h && h.owner ? String(h.owner).slice(0, 60) : null
     }));
   } else history = seedHistory(readings);
-  return { settings: settings, readings: readings, options: options, history: history };
+  return { settings: settings, readings: readings, history: history };
+}
+
+// Checks a backup file. Version 1 holds one car, version 2 holds all of them.
+// Returns { error } or { options, cars: [{ id, archived, settings, readings, history }], single }.
+function parseBackup(b) {
+  if (!b || b.app !== 'odometer-pace') return { error: 'That is not an Odometer Pace backup file.' };
+  const options = cleanOptions(b.options || {}) || { overage: false, whatif: false, glance: false, backup: false, multi: false, overageRate: null, history: true };
+  if (Array.isArray(b.vehicles)) {
+    if (!b.vehicles.length || b.vehicles.length > MAX_CARS) return { error: 'That backup has no vehicles, or too many.' };
+    const cars = [];
+    for (let i = 0; i < b.vehicles.length; i++) {
+      const raw = b.vehicles[i];
+      const one = parseCar(raw, 'Vehicle ' + (i + 1));
+      if (one.error) return one;
+      const id = raw && /^[a-f0-9]{4,12}$/.test(String(raw.id)) && !cars.some((c) => c.id === raw.id) ? raw.id : crypto.randomBytes(3).toString('hex');
+      cars.push({ id: id, archived: !!(raw && raw.archived), settings: one.settings, readings: one.readings, history: one.history });
+    }
+    if (cars.every((c) => c.archived)) cars[0].archived = false;
+    return { options: options, cars: cars, single: false };
+  }
+  const one = parseCar(b);
+  if (one.error) return one;
+  return { options: options, cars: [{ id: null, archived: false, settings: one.settings, readings: one.readings, history: one.history }], single: true };
 }
 
 // Clean JSON for the page and for agents.
-function statusBody() {
-  const plan = Lease.makePlan(data.settings);
-  if (!plan) return { configured: false };
+function statusBody(car) {
+  const plan = Lease.makePlan(car.settings);
+  if (!plan) return { configured: false, vehicle_id: car.id };
   const today = todayKey();
   const idx = Lease.dayIndex(plan, today);
-  const readings = sortedReadings();
+  const readings = sortedReadings(car);
   const ev = Lease.evaluate(plan, readings);
   const body = {
     configured: true,
+    vehicle_id: car.id,
     today: today,
     lease: {
-      vehicle: data.settings.vehicle || '',
+      vehicle: car.settings.vehicle || '',
       start_date: plan.startDate,
       end_date: plan.endDate,
       years: plan.years,
@@ -363,19 +458,19 @@ function uiBody(me) {
 }
 
 // Returns { error } or { previous }, where previous is the reading this one replaced (or null).
-function addReading(date, odometer, source) {
-  const plan = Lease.makePlan(data.settings);
+function addReading(car, date, odometer, source) {
+  const plan = Lease.makePlan(car.settings);
   if (!plan) return { error: 'Lease settings are not set up yet.' };
-  const others = data.readings.filter((r) => r.date !== date);
+  const others = car.readings.filter((r) => r.date !== date);
   const err = Lease.checkReading(plan, others, date, odometer);
   if (err) return { error: err };
-  const old = data.readings.find((r) => r.date === date);
+  const old = car.readings.find((r) => r.date === date);
   const previous = old ? { date: old.date, odometer: old.odometer } : null;
   // The same value for the same date is not a change: no new row, no history entry.
   if (old && old.odometer === odometer) return { previous: previous, unchanged: true };
   const at = new Date().toISOString();
-  data.readings = others.concat([{ date: date, odometer: odometer, source: source, saved: at }]);
-  logHistory(Object.assign({ at: at, date: date, odometer: odometer, previous: previous ? previous.odometer : null, deleted: false }, whoFromSource(source)));
+  car.readings = others.concat([{ date: date, odometer: odometer, source: source, saved: at }]);
+  logHistory(car, Object.assign({ at: at, date: date, odometer: odometer, previous: previous ? previous.odometer : null, deleted: false }, whoFromSource(source)));
   saveData();
   return { previous: previous };
 }
@@ -415,23 +510,26 @@ async function handleApi(req, res, url) {
       return sendJson(res, 401, { error: 'Missing or invalid API key. Send it as: Authorization: Bearer <key>' });
     }
     token.last_used = new Date().toISOString();
-    if (p === '/api/v1/status' && method === 'GET') return sendJson(res, 200, statusBody());
+    const tc = tokenCar(token);
+    if (tc.error) return sendJson(res, tc.status, { error: tc.error });
+    const car = tc.car;
+    if (p === '/api/v1/status' && method === 'GET') return sendJson(res, 200, statusBody(car));
     if (p === '/api/v1/glance' && method === 'GET') {
-      const st = statusBody();
+      const st = statusBody(car);
       if (!st.configured) return sendJson(res, 404, { error: 'Lease settings are not set up yet.' });
       if (!st.glance) return sendJson(res, 404, { error: 'The glance view is turned off in Settings.' });
       return sendJson(res, 200, Object.assign({ today: st.today, vehicle: st.lease.vehicle }, st.glance));
     }
-    if (p === '/api/v1/readings' && method === 'GET') return sendJson(res, 200, { readings: statusBody().readings || [] });
+    if (p === '/api/v1/readings' && method === 'GET') return sendJson(res, 200, { readings: statusBody(car).readings || [] });
     if (p === '/api/v1/readings' && method === 'POST') {
       let b;
       try { b = await readBody(req); } catch (e) { return sendJson(res, 400, { error: 'Send a JSON body like {"odometer": 1234}.' }); }
       const odometer = Number(String(b.odometer).replace(/,/g, ''));
       const date = b.date ? String(b.date) : todayKey();
-      const result = addReading(date, odometer, 'api:' + token.name + (token.ownerName ? ' (' + token.ownerName + ')' : ''));
+      const result = addReading(car, date, odometer, 'api:' + token.name + (token.ownerName ? ' (' + token.ownerName + ')' : ''));
       if (result.error) return sendJson(res, 400, { error: result.error });
       // No prompt for assistants: a same-date save replaces, and the reply says so.
-      return sendJson(res, 200, { saved: { date: date, odometer: odometer }, unchanged: !!result.unchanged, replaced: !!result.previous && !result.unchanged, previous: result.previous ? { odometer: result.previous.odometer } : null, status: statusBody() });
+      return sendJson(res, 200, { saved: { date: date, odometer: odometer }, unchanged: !!result.unchanged, replaced: !!result.previous && !result.unchanged, previous: result.previous ? { odometer: result.previous.odometer } : null, status: statusBody(car) });
     }
     return sendJson(res, 404, { error: 'Not found.' });
   }
@@ -486,7 +584,14 @@ async function handleApi(req, res, url) {
     return sendJson(res, 415, { error: 'Send JSON.' });
   }
 
-  if (p === '/api/status' && method === 'GET') return sendJson(res, 200, Object.assign(statusBody(), { ui: uiBody(me), me: { username: me.username, role: me.role } }));
+  // Which car this request is about. Routes that need one use it.
+  const car = pickCar(me, url);
+  const needCar = () => sendJson(res, 404, { error: 'No such vehicle.' });
+
+  if (p === '/api/status' && method === 'GET') {
+    if (!car) return needCar();
+    return sendJson(res, 200, Object.assign(statusFor(me, car), { ui: uiBody(me), me: { username: me.username, role: me.role } }));
+  }
 
   if (p === '/api/ui' && method === 'PUT') {
     let b;
@@ -507,29 +612,35 @@ async function handleApi(req, res, url) {
     if (!o) return sendJson(res, 400, { error: 'The overage rate is dollars per mile, from 0 to 10.' });
     data.options = o;
     saveData();
-    return sendJson(res, 200, statusBody());
+    const now = pickCar(me, url) || visibleCars(me)[0] || data.vehicles[0];
+    return sendJson(res, 200, statusFor(me, now));
   }
 
   if (p === '/api/export.csv' && method === 'GET') {
     if (!isAdmin) return adminOnly();
     if (!optionsBody().backup) return sendJson(res, 404, { error: 'Export is turned off in Settings.' });
-    res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="odometer-readings.csv"', 'Cache-Control': 'no-store' });
-    return res.end(readingsCsv());
+    if (!car) return needCar();
+    const tag = multiOn() ? '-' + (slug(car.settings && car.settings.vehicle) || car.id) : '';
+    res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="odometer-readings' + tag + '.csv"', 'Cache-Control': 'no-store' });
+    return res.end(readingsCsv(car));
   }
   if (p === '/api/history' && method === 'GET') {
     if (!optionsBody().history) return sendJson(res, 404, { error: 'History is turned off in Settings.' });
-    return sendJson(res, 200, { history: historyList() });
+    if (!car) return needCar();
+    return sendJson(res, 200, { history: historyList(car) });
   }
   if (p === '/api/history.csv' && method === 'GET') {
     if (!isAdmin) return adminOnly();
     if (!optionsBody().backup) return sendJson(res, 404, { error: 'Export is turned off in Settings.' });
-    res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="odometer-history.csv"', 'Cache-Control': 'no-store' });
-    return res.end(historyCsv());
+    if (!car) return needCar();
+    const tag = multiOn() ? '-' + (slug(car.settings && car.settings.vehicle) || car.id) : '';
+    res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="odometer-history' + tag + '.csv"', 'Cache-Control': 'no-store' });
+    return res.end(historyCsv(car));
   }
   if (p === '/api/backup' && method === 'GET') {
     if (!isAdmin) return adminOnly();
     if (!optionsBody().backup) return sendJson(res, 404, { error: 'Backup is turned off in Settings.' });
-    const file = { app: 'odometer-pace', version: 1, exported: new Date().toISOString(), settings: data.settings, options: optionsBody(), readings: sortedReadings().map((r) => ({ date: r.date, odometer: r.odometer, source: r.source || 'web' })), history: data.history };
+    const file = { app: 'odometer-pace', version: 2, exported: new Date().toISOString(), options: optionsBody(), vehicles: data.vehicles.map((v) => ({ id: v.id, archived: !!v.archived, settings: v.settings, readings: sortedReadings(v).map((r) => ({ date: r.date, odometer: r.odometer, source: r.source || 'web' })), history: v.history })) };
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': 'attachment; filename="odometer-pace-backup.json"', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify(file, null, 2));
   }
@@ -540,47 +651,100 @@ async function handleApi(req, res, url) {
     try { b = await readBody(req, 2000000); } catch (e) { return sendJson(res, 400, { error: 'That file is too big or not JSON.' }); }
     const r = parseBackup(b);
     if (r.error) return sendJson(res, 400, { error: r.error });
-    data.settings = r.settings;
-    data.readings = r.readings;
-    data.history = r.history;
-    data.options = r.options;
+    if (r.single) {
+      // An older one-car backup replaces car one and leaves the other cars alone.
+      const first = data.vehicles[0];
+      first.settings = r.cars[0].settings; first.readings = r.cars[0].readings; first.history = r.cars[0].history;
+      r.options.multi = multiOn();
+      data.options = r.options;
+    } else {
+      data.vehicles = r.cars.map((c) => ({ id: c.id, archived: c.archived, settings: c.settings, readings: c.readings, history: c.history }));
+      data.options = r.options;
+      data.users.forEach((u) => { if (Array.isArray(u.access)) u.access = u.access.filter((id) => data.vehicles.some((v) => v.id === id)); });
+    }
     saveData();
-    return sendJson(res, 200, statusBody());
+    const back = visibleCars(me)[0] || data.vehicles[0];
+    return sendJson(res, 200, statusFor(me, back));
   }
 
   if (p === '/api/settings') {
     if (!isAdmin) return adminOnly();
-    if (method === 'GET') return sendJson(res, 200, { settings: data.settings });
+    if (!car) return needCar();
+    if (method === 'GET') return sendJson(res, 200, { settings: car.settings });
     if (method === 'PUT') {
       let b;
       try { b = await readBody(req); } catch (e) { return sendJson(res, 400, { error: 'Bad request.' }); }
       const s = cleanSettings(b);
       if (s === 'plan') return sendJson(res, 400, { error: 'For a planned change, fill in both the date and the miles per day (0 to 1000), or leave both empty.' });
       if (!s) return sendJson(res, 400, { error: 'Check the lease settings: a valid start date, 1 to 10 years, total miles and a starting odometer.' });
-      data.settings = s;
+      car.settings = s;
       saveData();
       return sendJson(res, 200, { settings: s });
     }
   }
 
   if (p === '/api/readings' && method === 'POST') {
+    if (!car) return needCar();
     let b;
     try { b = await readBody(req); } catch (e) { return sendJson(res, 400, { error: 'Bad request.' }); }
     const odometer = Number(String(b.odometer).replace(/,/g, ''));
     const date = String(b.date || todayKey());
-    const result = addReading(date, odometer, 'web:' + me.username);
+    const result = addReading(car, date, odometer, 'web:' + me.username);
     if (result.error) return sendJson(res, 400, { error: result.error });
-    return sendJson(res, 200, Object.assign(statusBody(), { unchanged: !!result.unchanged }));
+    return sendJson(res, 200, Object.assign(statusFor(me, car), { unchanged: !!result.unchanged }));
   }
 
   const del = /^\/api\/readings\/(\d{4}-\d{2}-\d{2})$/.exec(p);
   if (del && method === 'DELETE') {
     if (!isAdmin) return adminOnly();
-    const gone = data.readings.find((r) => r.date === del[1]);
-    data.readings = data.readings.filter((r) => r.date !== del[1]);
-    if (gone) logHistory({ at: new Date().toISOString(), date: gone.date, odometer: gone.odometer, previous: null, deleted: true, by: 'person', name: me.username, owner: null });
+    if (!car) return needCar();
+    const gone = car.readings.find((r) => r.date === del[1]);
+    car.readings = car.readings.filter((r) => r.date !== del[1]);
+    if (gone) logHistory(car, { at: new Date().toISOString(), date: gone.date, odometer: gone.odometer, previous: null, deleted: true, by: 'person', name: me.username, owner: null });
     saveData();
-    return sendJson(res, 200, statusBody());
+    return sendJson(res, 200, statusFor(me, car));
+  }
+
+  // Vehicles. Admin only. Everything here needs Multiple vehicles turned on, except the list.
+  if (p === '/api/vehicles' || p.startsWith('/api/vehicles/')) {
+    if (!isAdmin) return adminOnly();
+    if (p === '/api/vehicles' && method === 'GET') return sendJson(res, 200, { vehicles: data.vehicles.map(carBrief) });
+    if (!multiOn()) return sendJson(res, 400, { error: 'Turn on Multiple vehicles in Settings first.' });
+    if (p === '/api/vehicles' && method === 'POST') {
+      let b;
+      try { b = await readBody(req); } catch (e) { return sendJson(res, 400, { error: 'Bad request.' }); }
+      if (data.vehicles.length >= MAX_CARS) return sendJson(res, 400, { error: 'That is the most vehicles this app tracks (' + MAX_CARS + ').' });
+      const s = cleanSettings(b);
+      if (s === 'plan') return sendJson(res, 400, { error: 'For a planned change, fill in both the date and the miles per day (0 to 1000), or leave both empty.' });
+      if (!s) return sendJson(res, 400, { error: 'Check the lease settings: a valid start date, 1 to 10 years, total miles and a starting odometer.' });
+      const created = newCar(s);
+      data.vehicles.push(created);
+      saveData();
+      return sendJson(res, 200, { id: created.id, vehicles: data.vehicles.map(carBrief) });
+    }
+    const vm = /^\/api\/vehicles\/([a-f0-9]+)(\/archive|\/restore)?$/.exec(p);
+    const target = vm && data.vehicles.find((v) => v.id === vm[1]);
+    if (!target) return sendJson(res, 404, { error: 'No such vehicle.' });
+    if (vm[2] === '/archive' && method === 'POST') {
+      if (!target.archived && activeCars().length < 2) return sendJson(res, 400, { error: 'Keep at least one vehicle that is not archived.' });
+      target.archived = true;
+      saveData();
+      return sendJson(res, 200, { vehicles: data.vehicles.map(carBrief) });
+    }
+    if (vm[2] === '/restore' && method === 'POST') {
+      target.archived = false;
+      saveData();
+      return sendJson(res, 200, { vehicles: data.vehicles.map(carBrief) });
+    }
+    if (!vm[2] && method === 'DELETE') {
+      if (!target.archived) return sendJson(res, 400, { error: 'Archive the vehicle first. Deleting is permanent.' });
+      data.vehicles = data.vehicles.filter((v) => v.id !== target.id);
+      data.tokens = data.tokens.filter((k) => k.vehicleId !== target.id);
+      data.users.forEach((u) => { if (Array.isArray(u.access)) u.access = u.access.filter((id) => id !== target.id); });
+      saveData();
+      return sendJson(res, 200, { vehicles: data.vehicles.map(carBrief) });
+    }
+    return sendJson(res, 404, { error: 'Not found.' });
   }
 
   // Your own password.
@@ -605,7 +769,7 @@ async function handleApi(req, res, url) {
     if (!isAdmin) return adminOnly();
     if (AUTH_MODE === 'proxy') return sendJson(res, 400, { error: 'Logins are handled by the reverse proxy.' });
     if (p === '/api/users' && method === 'GET') {
-      return sendJson(res, 200, { users: data.users.map((u) => ({ id: u.id, username: u.username, role: u.role })) });
+      return sendJson(res, 200, { users: data.users.map((u) => ({ id: u.id, username: u.username, role: u.role, access: Array.isArray(u.access) ? u.access : 'all' })) });
     }
     let b = {};
     if (method !== 'DELETE') {
@@ -616,14 +780,22 @@ async function handleApi(req, res, url) {
       if (!USERNAME.test(username)) return sendJson(res, 400, { error: 'Username: 2 to 30 letters, numbers, dots, dashes or underscores.' });
       if (findUser(username)) return sendJson(res, 400, { error: 'That username is taken.' });
       if (String(b.password || '').length < 8) return sendJson(res, 400, { error: 'Use at least 8 characters.' });
-      data.users.push(makeUser(username, String(b.password), 'user'));
+      const made = makeUser(username, String(b.password), 'user');
+      made.access = cleanAccess(b);
+      data.users.push(made);
       saveData();
       return sendJson(res, 200, { ok: true });
     }
-    const one = /^\/api\/users\/([a-f0-9]+)(\/password)?$/.exec(p);
+    const one = /^\/api\/users\/([a-f0-9]+)(\/password|\/access)?$/.exec(p);
     const target = one && data.users.find((u) => u.id === one[1]);
     if (!target) return sendJson(res, 404, { error: 'No such user.' });
-    if (one[2] && method === 'POST') {
+    if (one[2] === '/access' && method === 'PUT') {
+      if (target.role === 'admin') return sendJson(res, 400, { error: 'The admin always sees every vehicle.' });
+      target.access = cleanAccess(b);
+      saveData();
+      return sendJson(res, 200, { ok: true, access: target.access });
+    }
+    if (one[2] === '/password' && method === 'POST') {
       if (String(b.password || '').length < 8) return sendJson(res, 400, { error: 'Use at least 8 characters.' });
       target.salt = crypto.randomBytes(16).toString('hex');
       target.hash = hashPassword(String(b.password), target.salt);
@@ -647,15 +819,18 @@ async function handleApi(req, res, url) {
     if (method === 'GET') {
       // Everyone sees their own keys. The admin sees all of them.
       const mine = data.tokens.filter((t) => isAdmin || t.ownerId === me.id);
-      return sendJson(res, 200, { tokens: mine.map((t) => ({ id: t.id, name: t.name, owner: t.ownerName || '', own: t.ownerId === me.id, created: t.created, last_used: t.last_used || null })) });
+      return sendJson(res, 200, { tokens: mine.map((t) => ({ vehicle: t.vehicleId || data.vehicles[0].id, id: t.id, name: t.name, owner: t.ownerName || '', own: t.ownerId === me.id, created: t.created, last_used: t.last_used || null })) });
     }
     if (method === 'POST') {
       let b;
       try { b = await readBody(req); } catch (e) { return sendJson(res, 400, { error: 'Bad request.' }); }
       const name = String(b.name || '').trim().slice(0, 40);
       if (!name) return sendJson(res, 400, { error: 'Give the key a name.' });
+      // A key reaches one car. Without a choice it gets the car you are looking at.
+      const keyCar = b.vehicle ? visibleCars(me).find((v) => v.id === b.vehicle) : (visibleCars(me)[0] || null);
+      if (!keyCar) return sendJson(res, 400, { error: 'Pick one of your vehicles for this key.' });
       const key = 'op_' + crypto.randomBytes(32).toString('base64url');
-      data.tokens.push({ id: crypto.randomBytes(6).toString('hex'), name: name, ownerId: me.id, ownerName: me.username, hash: sha256(key), created: new Date().toISOString() });
+      data.tokens.push({ id: crypto.randomBytes(6).toString('hex'), name: name, vehicleId: keyCar.id, ownerId: me.id, ownerName: me.username, hash: sha256(key), created: new Date().toISOString() });
       saveData();
       // The key is shown this once and only its hash is kept.
       return sendJson(res, 200, { key: key, name: name });

@@ -27,6 +27,7 @@ The screenshots use an invented lease ("Demo SUV") and made-up readings.
 - Dark theme with six accent colors (purple by default) and an OLED black option, set in Settings, works on phones
 - Admin and user logins: the admin sets up the lease, everyone else can add readings
 - API keys so an AI or script can add readings and read your status, one set per person
+- Optional: more than one car, with per-car access for each login (off by default)
 - Your lease details are typed in the app on first run. Nothing about your lease is in the code.
 
 ## Setup
@@ -97,9 +98,25 @@ If you would rather put your own login in front (Authentik, Authelia and similar
 
 The app sends `noindex` headers and a `robots.txt` that disallows everything. Your server settings, readings and keys are never reachable without logging in.
 
+## More than one car
+
+Off by default. Turn on **Multiple vehicles** in Settings, Optional features. Your current lease becomes car one and nothing in it changes. With the switch off, the app looks and works as it always has.
+
+With it on:
+
+- The bar under the title becomes a picker once you have two cars. Tap it to see each car's pace and switch. The admin can add a car there or in Settings.
+- Settings gets a **Vehicles** card. Add a car (its own name and lease), pick one to edit, archive one to hide it and keep its readings, or delete an archived one for good. Each car has its own lease, readings, history, planned change and CSV.
+- Each login gets a checkbox per car, so a person only sees and adds readings to the cars they are given. New logins start with every car ticked. A login with every car ticked also sees cars you add later. The admin always sees every car and is the only one who adds, edits, archives or deletes cars.
+- An API key belongs to one car. Pick the car when you create the key, and the key can only read and add readings for that one. Keys made before you turned this on belong to car one. If the car is archived or the person loses access to it, the key stops working.
+- One backup covers every car (a backup from an older version restores into car one only). The CSV downloads are per car.
+
+Turning the switch off again hides the other cars and shows car one. Nothing is deleted.
+
+![Phone view of the vehicle picker and the Vehicles settings, using invented demo data](docs/multi-vehicles.png)
+
 ## Running a second copy for another car
 
-The app tracks one vehicle. For another car, run a second copy as its own stack. Nothing is shared between copies.
+If you would rather keep cars fully apart, run a second copy as its own stack instead of using Multiple vehicles. Nothing is shared between copies.
 
 1. Paste the compose file again as a new stack, and change the service name and `container_name` to something unique, for example `odometer-pace-2`.
 2. Use a different `PORT` (for example `8462`) and a different `DATA_PATH` (for example `/DATA/AppData/odometer-pace-2`).
@@ -132,7 +149,7 @@ Everyone with a login (admin or user) can open Settings, then API keys, give a k
 
 **Hand the key to your AI securely.** Give it through a vault, a secrets manager or an environment variable, never by pasting it into a chat or a prompt. Anything typed into a chat can be stored in its history. If a key ends up somewhere it should not be, revoke it in Settings and make a new one.
 
-A key can add odometer readings and read the status and readings. It cannot see settings, logins, or other keys. The full docs, with examples, are at `/api/docs` after you log in.
+A key can add odometer readings and read the status and readings. It cannot see settings, logins, or other keys. With Multiple vehicles on, a key belongs to one car and only reaches that car. The full docs, with examples, are at `/api/docs` after you log in.
 
 ```
 curl -H "Authorization: Bearer $KEY" https://your-host/api/v1/status

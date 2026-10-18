@@ -6,6 +6,19 @@
   var mode = 'app';
   var ui = { accent: 'purple', oled: false };
   var factsOpen = false;
+  var car = '';  // the vehicle being looked at, when Multiple vehicles is on
+  try { car = localStorage.getItem('op_car') || ''; } catch (e) { car = ''; }
+  function setCar(id) { car = id || ''; try { localStorage.setItem('op_car', car); } catch (e) { /* kept for this visit only */ } }
+  // Paths that belong to one car get ?vehicle= added.
+  function carPath(path) {
+    if (!car || !/^\/api\/(status|settings|readings|history|export\.csv|history\.csv)(\/|\?|\.|$)/.test(path)) return path;
+    return path + (path.indexOf('?') < 0 ? '?' : '&') + 'vehicle=' + encodeURIComponent(car);
+  }
+  function multi() { return !!(status && status.options && status.options.multi && status.vehicles); }
+  function carName(id) {
+    var v = ((status && status.vehicles) || []).filter(function (x) { return x.id === id; })[0];
+    return v ? v.name : '';
+  }
 
   // Remember the theme on this device so the login page matches before the server answers.
   try { ui = Object.assign(ui, JSON.parse(localStorage.getItem('op_ui') || '{}')); } catch (e) { /* keep defaults */ }
@@ -50,6 +63,8 @@
     right: '<path d="M9 6l6 6-6 6"/>',
     chevron: '<path d="M6 9l6 6 6-6"/>',
     back: '<path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>',
+    check: '<path d="M5 12l5 5 9-10"/>',
+    archive: '<path d="M3 4h18v4H3z"/><path d="M5 8v12h14V8"/><path d="M10 12h4"/>',
     trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
     today: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3"/><path d="M12 19v3"/><path d="M2 12h3"/><path d="M19 12h3"/>',
     key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9"/><path d="M16 7l3 3"/>',
@@ -82,7 +97,7 @@
       opts.headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(body || {});
     }
-    return fetch(path, opts).then(function (r) {
+    return fetch(carPath(path), opts).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (j) {
         if (!r.ok) {
           var e = new Error(j.error || 'Something went wrong.');
@@ -149,6 +164,7 @@
   function featuresCard() {
     var o = (status && status.options) || {};
     var names = [
+      ['multi', 'Multiple vehicles', 'Track more than one car. Adds a vehicle picker at the top, a Vehicles section in Settings, and per-car access for each login. Off by default. With it off, the app looks and works exactly as before.'],
       ['overage', 'Overage cost', 'Shows what the miles past the limit would cost at turn-in.'],
       ['whatif', 'Trip what-if', 'A small calculator for how a planned trip changes your projection.'],
       ['glance', 'Glance view', 'A card at the top with the miles you can drive today and this week, and a read-only /api/v1/glance for widgets and Home Assistant.'],
@@ -173,8 +189,8 @@
       el('div', { class: 'spacer' }),
       el('button', { class: 'btn', type: 'button', text: 'Save', onclick: function () {
         msg.className = 'err'; msg.textContent = '';
-        api('PUT', '/api/options', { overage: boxes.overage.checked, whatif: boxes.whatif.checked, glance: boxes.glance.checked, backup: boxes.backup.checked, history: boxes.history.checked, overageRate: rate.value })
-          .then(function (st) { status = st; msg.className = 'err ok'; msg.textContent = 'Saved.'; renderSettings(false); })
+        api('PUT', '/api/options', { overage: boxes.overage.checked, whatif: boxes.whatif.checked, glance: boxes.glance.checked, backup: boxes.backup.checked, multi: boxes.multi.checked, history: boxes.history.checked, overageRate: rate.value })
+          .then(function (st) { status = st; if (!st.options.multi) setCar(''); else if (st.vehicle_id) setCar(st.vehicle_id); msg.className = 'err ok'; msg.textContent = 'Saved.'; renderSettings(false); })
           .catch(function (x) { msg.textContent = x.message; });
       } }),
       msg
@@ -190,18 +206,19 @@
           var parsed;
           try { parsed = JSON.parse(t); } catch (e) { throw new Error('That file is not valid JSON.'); }
           var n = Array.isArray(parsed.readings) ? parsed.readings.length : 0;
-          if (!confirm('Restore this backup? It replaces your lease settings and all ' + (status.readings || []).length + ' current readings with the ' + n + ' in the file. Logins and API keys stay as they are.')) { file.value = ''; return; }
+          var cars = Array.isArray(parsed.vehicles) ? parsed.vehicles.length : 0;
+          if (!confirm(cars ? 'Restore this backup? It replaces all your vehicles, their lease settings and readings with the ' + cars + ' in the file. Logins and API keys stay as they are.' : 'Restore this backup? It replaces the lease settings and all ' + (status.readings || []).length + ' current readings of the first vehicle with the ' + n + ' in the file. Logins and API keys stay as they are.')) { file.value = ''; return; }
           return api('POST', '/api/restore', parsed).then(function () { rmsg.className = 'err ok'; rmsg.textContent = 'Restored.'; boot(); });
         }).catch(function (x) { rmsg.textContent = x.message; file.value = ''; });
       });
       box.appendChild(el('div', { class: 'spacer' }));
       box.appendChild(el('h3', { class: 'minor', text: 'Export and backup' }));
       box.appendChild(el('p', { class: 'row' }, [
-        el('a', { class: 'btn quiet btn-link', href: '/api/export.csv', download: 'odometer-readings.csv', text: 'Download CSV' }), ' ',
-        el('a', { class: 'btn quiet btn-link', href: '/api/history.csv', download: 'odometer-history.csv', text: 'History CSV' }), ' ',
+        el('a', { class: 'btn quiet btn-link', href: carPath('/api/export.csv'), download: 'odometer-readings.csv', text: 'Download CSV' }), ' ',
+        el('a', { class: 'btn quiet btn-link', href: carPath('/api/history.csv'), download: 'odometer-history.csv', text: 'History CSV' }), ' ',
         el('a', { class: 'btn quiet btn-link', href: '/api/backup', download: 'odometer-pace-backup.json', text: 'Download backup' })
       ]));
-      box.appendChild(el('p', { class: 'note', text: 'The backup holds your lease settings, readings and history, not logins or API keys.' }));
+      box.appendChild(el('p', { class: 'note', text: 'The backup holds ' + (multi() ? 'every vehicle\'s' : 'your') + ' lease settings, readings and history, not logins or API keys.' }));
       box.appendChild(el('label', { class: 'field' }, ['Restore from a backup file', file]));
       box.appendChild(rmsg);
     }
@@ -210,7 +227,7 @@
 
   // ---------- settings ----------
 
-  function renderSettings(first) {
+  function renderSettings(first, adding) {
     if (me.role !== 'admin') return first ? renderWaiting() : renderAccount();
     var vehicle = el('input', { type: 'text', maxlength: '60', placeholder: 'Optional, e.g. My lease' });
     var start = el('input', { type: 'date' });
@@ -222,7 +239,7 @@
     var err = el('p', { class: 'err', role: 'status' });
     var keysBox = el('div');
 
-    api('GET', '/api/settings').then(function (r) {
+    if (!adding) api('GET', '/api/settings').then(function (r) {
       var s = r.settings;
       if (!s) return;
       vehicle.value = s.vehicle || ''; start.value = s.startDate; years.value = s.years;
@@ -234,14 +251,20 @@
       e.preventDefault();
       err.textContent = '';
       err.className = 'err';
-      api('PUT', '/api/settings', {
+      var body = {
         vehicle: vehicle.value, startDate: start.value, years: years.value, totalMiles: total.value, startOdometer: odo.value,
         planFrom: planFrom.value, planPerDay: planPerDay.value
-      }).then(boot).catch(function (x) { err.textContent = x.message; });
+      };
+      if (adding) {
+        if (!vehicle.value.trim()) { err.textContent = 'Give the vehicle a name.'; return; }
+        api('POST', '/api/vehicles', body).then(function (r) { setCar(r.id); boot(); }).catch(function (x) { err.textContent = x.message; });
+        return;
+      }
+      api('PUT', '/api/settings', body).then(boot).catch(function (x) { err.textContent = x.message; });
     }
 
     var lease = el('div', { class: 'card' }, [
-      el('h2', { text: first ? 'Set up your lease' : 'Lease settings' }),
+      el('h2', { text: adding ? 'Add a vehicle' : first ? 'Set up your lease' : multi() ? 'Lease settings: ' + carName(car || status.vehicle_id) : 'Lease settings' }),
       el('p', { class: 'sub', text: 'These stay on your server. Change them any time and the calendar redraws.' }),
       el('form', { onsubmit: save }, [
         el('div', { class: 'form-row' }, [
@@ -268,6 +291,11 @@
     ]);
 
     var kids = [lease];
+    if (adding) {
+      kids.unshift(el('p', {}, [iconBtn('back', 'Back', function () { renderSettings(false); }, 'quiet')]));
+      show(el('div', { class: 'wrap top' }, kids));
+      return;
+    }
     if (!first) {
       kids.push(el('div', { class: 'card' }, [
         el('h2', { text: 'API keys' }),
@@ -281,6 +309,7 @@
       kids.splice(1, 0, appearanceCard(), featuresCard());
       if (mode !== 'proxy') kids.splice(3, 0, usersCard());
       if (mode !== 'proxy') kids.splice(4, 0, passwordCard());
+      if (multi()) kids.unshift(vehiclesCard());
     }
     kids.unshift(el('p', {}, [first ? iconBtn('logout', 'Log out', logout, 'quiet') : iconBtn('back', 'Back', boot, 'quiet')]));
     show(el('div', { class: 'wrap top' }, kids));
@@ -339,17 +368,98 @@
   }
 
   // Admin only: add and remove household logins.
+  // The pace of a car in a few words, for the picker and the Vehicles list.
+  function carLine(v) {
+    if (!v.configured) return 'Not set up yet';
+    var day = v.state === 'not_started' ? 'Not started' : v.state === 'complete' ? 'Lease complete' : 'Day ' + fmt(v.day_of_lease) + ' of ' + fmt(v.days_total);
+    if (v.miles_over_pace === null || v.miles_over_pace === undefined) return day + ' \u00b7 no readings yet';
+    var d = v.miles_over_pace;
+    return day + ' \u00b7 ' + (d === 0 ? 'on pace' : fmt(Math.abs(d)) + (d > 0 ? ' over pace' : ' under pace'));
+  }
+
+  // Admin only: the list of cars, with add, edit, archive and delete.
+  function vehiclesCard() {
+    var list = el('div');
+    var msg = el('p', { class: 'err', role: 'status' });
+    function draw() {
+      api('GET', '/api/vehicles').then(function (r) {
+        list.textContent = '';
+        r.vehicles.forEach(function (v) {
+          var current = !v.archived && v.id === (car || status.vehicle_id);
+          var btns = el('span', { class: 'row-btns' });
+          if (!v.archived) {
+            var editBtn = el('button', { class: 'btn quiet', type: 'button', text: current ? 'Editing' : 'Edit', onclick: function () { setCar(v.id); boot().then(function () { renderSettings(false); }); } });
+            if (current) editBtn.disabled = true;
+            btns.appendChild(editBtn);
+            btns.appendChild(iconBtn('archive', 'Archive ' + v.name, function () {
+              if (confirm('Archive ' + v.name + '? It disappears from the picker and its API keys stop working. Its readings are kept, and you can restore it here.')) {
+                api('POST', '/api/vehicles/' + v.id + '/archive', {}).then(function () { if (car === v.id) setCar(''); return boot(); }).then(function () { renderSettings(false); }).catch(function (x) { msg.textContent = x.message; });
+              }
+            }, 'quiet'));
+          } else {
+            btns.appendChild(el('button', { class: 'btn quiet', type: 'button', text: 'Restore', onclick: function () { api('POST', '/api/vehicles/' + v.id + '/restore', {}).then(function () { return boot(); }).then(function () { renderSettings(false); }); } }));
+            btns.appendChild(iconBtn('trash', 'Delete ' + v.name + ' for good', function () {
+              if (confirm('Delete ' + v.name + ' for good? Its lease, all its readings and its history are removed and cannot be brought back (restore a backup to undo).')) {
+                api('DELETE', '/api/vehicles/' + v.id, {}).then(draw).catch(function (x) { msg.textContent = x.message; });
+              }
+            }, 'danger'));
+          }
+          list.appendChild(el('div', { class: 'token-row' }, [
+            el('span', {}, [el('strong', { text: v.name }), v.archived ? el('span', { class: 'tag', text: 'Archived' }) : null, el('br'), el('span', { class: 'note', text: carLine(v) })]),
+            btns
+          ]));
+        });
+      });
+    }
+    draw();
+    return el('div', { class: 'card' }, [
+      el('h2', { text: 'Vehicles' }),
+      el('p', { class: 'sub', text: 'Each car has its own lease, readings, history and API keys. Archive a car to hide it and keep its readings. Delete is only for archived cars.' }),
+      list,
+      el('div', { class: 'spacer' }),
+      el('button', { class: 'btn', type: 'button', text: 'Add vehicle', onclick: function () { renderSettings(false, true); } }),
+      msg
+    ]);
+  }
+
+  // Which cars a login can see: a checkbox for each, all ticked meaning every car, now and later.
+  function accessBoxes(selected, onChange) {
+    var cars = (status.vehicles || []);
+    var boxes = cars.map(function (v) {
+      var cb = el('input', { type: 'checkbox' });
+      cb.checked = selected === 'all' || (Array.isArray(selected) && selected.indexOf(v.id) >= 0);
+      cb.addEventListener('change', function () { if (onChange) onChange(read()); });
+      return { id: v.id, cb: cb, row: el('label', { class: 'check tight' }, [cb, v.name]) };
+    });
+    function read() {
+      var ids = boxes.filter(function (b) { return b.cb.checked; }).map(function (b) { return b.id; });
+      return ids.length === boxes.length ? { all: true } : { vehicles: ids };
+    }
+    return { node: el('div', { class: 'access' }, boxes.map(function (b) { return b.row; })), read: read };
+  }
+
   function usersCard() {
     var list = el('div');
     var name = el('input', { type: 'text', maxlength: '30', autocapitalize: 'none', spellcheck: 'false', autocomplete: 'off', placeholder: 'Username' });
     var pw = el('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Password (8 or more characters)' });
     var msg = el('p', { class: 'err', role: 'status' });
+    var newAccess = multi() ? accessBoxes('all') : null;
 
     function draw() {
       api('GET', '/api/users').then(function (r) {
         list.textContent = '';
         r.users.forEach(function (u) {
           var row = el('div', { class: 'token-row' }, [el('span', { text: u.username + (u.role === 'admin' ? ' (admin)' : '') })]);
+          if (multi()) {
+            row.className = 'token-row stack';
+            if (u.role === 'admin') row.firstChild.appendChild(el('span', { class: 'note', text: '  sees every vehicle' }));
+            else {
+              row.appendChild(el('span', { class: 'note', text: 'Can see:' }));
+              row.appendChild(accessBoxes(u.access, function (a) {
+                api('PUT', '/api/users/' + u.id + '/access', a).then(function () { msg.className = 'err ok'; msg.textContent = 'Access saved for ' + u.username + '.'; }).catch(function (x) { msg.className = 'err'; msg.textContent = x.message; });
+              }).node);
+            }
+          }
           if (u.role !== 'admin') {
             var btns = el('span', { class: 'row-btns' }, [
               iconBtn('key', 'New password for ' + u.username, function () {
@@ -376,7 +486,7 @@
       el('form', { onsubmit: function (e) {
         e.preventDefault();
         msg.className = 'err';
-        api('POST', '/api/users', { username: name.value, password: pw.value }).then(function () {
+        api('POST', '/api/users', Object.assign({ username: name.value, password: pw.value }, newAccess ? newAccess.read() : {})).then(function () {
           name.value = ''; pw.value = '';
           msg.className = 'err ok';
           msg.textContent = 'Login added.';
@@ -385,6 +495,7 @@
       } }, [
         el('label', { class: 'field' }, ['New login', name]), el('div', { class: 'spacer' }),
         el('label', { class: 'field' }, [pw]), el('div', { class: 'spacer' }),
+        newAccess ? el('p', { class: 'note', text: 'New login can see:' }) : null, newAccess ? newAccess.node : null, newAccess ? el('div', { class: 'spacer' }) : null,
         el('button', { class: 'btn', type: 'submit', text: 'Add login' }), msg
       ])
     ]);
@@ -426,7 +537,7 @@
       box.textContent = '';
       r.tokens.forEach(function (t) {
         box.appendChild(el('div', { class: 'token-row' }, [
-          el('span', { text: t.name + (me.role === 'admin' && t.owner && !t.own ? ' for ' + t.owner : '') + (t.last_used ? ' (last used ' + t.last_used.slice(0, 10) + ')' : ' (never used)') }),
+          el('span', { text: t.name + (multi() && carName(t.vehicle) ? ' \u00b7 ' + carName(t.vehicle) : '') + (me.role === 'admin' && t.owner && !t.own ? ' for ' + t.owner : '') + (t.last_used ? ' (last used ' + t.last_used.slice(0, 10) + ')' : ' (never used)') }),
           iconBtn('ban', 'Revoke key ' + t.name, function () {
             if (confirm('Revoke "' + t.name + '"? Anything using it stops working.')) api('DELETE', '/api/tokens/' + t.id).then(function () { loadKeys(box); });
           }, 'danger')
@@ -434,11 +545,17 @@
       });
       var name = el('input', { type: 'text', maxlength: '40', placeholder: 'Key name, e.g. Instinct' });
       var out = el('div');
+      var pick = null;
+      if (multi()) {
+        pick = el('select', { 'aria-label': 'Vehicle for this key' }, status.vehicles.map(function (v) { return el('option', { value: v.id, text: v.name }); }));
+        pick.value = car || status.vehicle_id;
+      }
       box.appendChild(el('div', { class: 'spacer' }));
       box.appendChild(el('div', { class: 'form-row' }, [
         el('label', { class: 'field' }, ['New key', name]),
+        pick ? el('label', { class: 'field' }, ['Vehicle', pick]) : null,
         el('button', { class: 'btn', type: 'button', text: 'Create key', onclick: function () {
-          api('POST', '/api/tokens', { name: name.value }).then(function (k) {
+          api('POST', '/api/tokens', pick ? { name: name.value, vehicle: pick.value } : { name: name.value }).then(function (k) {
             loadKeys(box, k.key);
           }).catch(function (x) { out.textContent = x.message; });
         } })
@@ -490,7 +607,7 @@
     }).catch(function (x) { msg.textContent = x.message; });
     show(el('div', { class: 'wrap top' }, [
       el('p', {}, [iconBtn('back', 'Back', boot, 'quiet')]),
-      el('div', { class: 'card' }, [el('h2', { text: 'History' }), el('p', { class: 'sub', text: 'Every reading that was entered, newest first.' }), list, msg])
+      el('div', { class: 'card' }, [el('h2', { text: multi() ? 'History: ' + carName(car || status.vehicle_id) : 'History' }), el('p', { class: 'sub', text: 'Every reading that was entered, newest first.' }), list, msg])
     ]));
   }
 
@@ -509,9 +626,22 @@
       ])
     ]);
     factsBox.hidden = !factsOpen;
+    var picker = null;
+    if (multi() && s.vehicles.length > 1) {
+      picker = el('div', { class: 'car-list', role: 'listbox', 'aria-label': 'Vehicles' }, s.vehicles.map(function (v) {
+        var here = v.id === s.vehicle_id;
+        return el('button', { class: 'car-row', type: 'button', role: 'option', 'aria-selected': String(here), onclick: function () {
+          factsOpen = false;
+          if (!here) { setCar(v.id); boot(); } else { factsBox.hidden = true; picker.hidden = true; line.classList.remove('open'); }
+        } }, [el('span', {}, [el('strong', { text: v.name }), el('span', { class: 'car-sub', text: carLine(v) })]), here ? icon('check') : null]);
+      }));
+      if (me.role === 'admin') picker.appendChild(el('button', { class: 'car-row add', type: 'button', onclick: function () { renderSettings(false, true); } }, [el('strong', { text: '+  Add vehicle' })]));
+      picker.hidden = !factsOpen;
+    }
     var line = el('button', { class: 'summary-line', type: 'button', 'aria-expanded': String(factsOpen), onclick: function () {
       factsOpen = !factsOpen;
       factsBox.hidden = !factsOpen;
+      if (picker) picker.hidden = !factsOpen;
       line.setAttribute('aria-expanded', String(factsOpen));
       line.classList.toggle('open', factsOpen);
     } }, [el('span', { text: summary }), icon('chevron')]);
@@ -525,7 +655,7 @@
           iconBtn('logout', 'Log out', logout, 'on-hero')
         ])
       ]),
-      line, factsBox
+      line, picker, factsBox
     ])]);
 
     var cards = [];
@@ -932,12 +1062,17 @@
   // ---------- start ----------
 
   function boot() {
-    api('GET', '/api/session').then(function (sess) {
+    return api('GET', '/api/session').then(function (sess) {
       mode = sess.mode;
       if (sess.setupNeeded) return renderLogin(true);
       if (!sess.loggedIn) return renderLogin(false);
-      return api('GET', '/api/status').then(function (st) {
+      return api('GET', '/api/status').catch(function (e) {
+        // A remembered car that is gone or no longer shared: fall back to the first one.
+        if (e.status === 404 && car) { setCar(''); return api('GET', '/api/status'); }
+        throw e;
+      }).then(function (st) {
         status = st;
+        if (st.vehicles && st.vehicle_id) setCar(st.vehicle_id); else if (car) setCar('');
         if (st.me) me = st.me;
         if (st.ui) applyUi(st.ui);
         if (!st.configured) renderSettings(true);
