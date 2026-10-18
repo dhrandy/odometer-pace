@@ -329,3 +329,6 @@ html[data-oled="true"] .month.big .day.today { background: var(--accent-strong);
 .token-row .tag { margin-left: 8px; }
 .access { display: flex; flex-direction: column; gap: 2px; }
 .check.tight { min-height: 44px; }
+
+.tag.warn { border-color: var(--over); color: var(--over); }
+.sumuser .seg button { padding: 0; min-width: 0; }

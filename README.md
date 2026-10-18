@@ -48,6 +48,7 @@ The screenshots use an invented lease ("Demo SUV") and made-up readings.
 | `COOKIE_SECURE` | `true` when you reach it over https, `false` on plain http | `true` |
 | `TRUST_PROXY` | `1` when it sits behind a reverse proxy, otherwise `0` | `1` |
 | `DATA_PATH` | Folder on your server where readings are stored | `/DATA/AppData/odometer-pace` |
+| `NOTIFY_1_NAME` to `NOTIFY_4_LINK` | Optional weekly summary targets (see [Weekly summary](#weekly-summary)). Leave them empty if you do not use it | `Alex Telegram` |
 
 A filled-out example is in `.env.example`.
 
@@ -67,6 +68,14 @@ services:
       AUTH_MODE: ${AUTH_MODE}
       COOKIE_SECURE: ${COOKIE_SECURE}
       TRUST_PROXY: ${TRUST_PROXY}
+      NOTIFY_1_NAME: ${NOTIFY_1_NAME}
+      NOTIFY_1_LINK: ${NOTIFY_1_LINK}
+      NOTIFY_2_NAME: ${NOTIFY_2_NAME}
+      NOTIFY_2_LINK: ${NOTIFY_2_LINK}
+      NOTIFY_3_NAME: ${NOTIFY_3_NAME}
+      NOTIFY_3_LINK: ${NOTIFY_3_LINK}
+      NOTIFY_4_NAME: ${NOTIFY_4_NAME}
+      NOTIFY_4_LINK: ${NOTIFY_4_LINK}
     volumes:
       - ${DATA_PATH}:/data
     read_only: true
@@ -233,6 +242,7 @@ Settings has an **Optional features** card. Everything in it is off until the ad
 - **Glance view**: a card at the top with the miles you can still drive today and by the end of the week and stay on pace, amber when over and your accent color when on track. It also turns on `GET /api/v1/glance`, a small read-only endpoint for widgets.
 - **History**: a clock button in the header opens a page that lists every reading that was entered, newest first: the odometer value, the date it is for, the value it replaced (if any), when it was saved, and who entered it. A person shows by name. An AI or script shows as `AI/API` with the key name and the key owner. Deleted readings are logged too. Every login can see it. Turn it off here and the button and page go away (the log keeps recording).
 - **Export and backup**: download readings and history as CSV, or a JSON backup of lease settings, readings and history. Restore from a backup file in the same card. Backups never contain logins or API keys.
+- **Weekly summary**: a weekly message per login to Telegram or email. See [Weekly summary](#weekly-summary).
 
 ### Home Assistant sensor
 
@@ -256,6 +266,39 @@ rest:
 ```
 
 `status` is `on_track` or `over`. The numbers come from your latest reading, so they only move when someone adds one.
+
+## Weekly summary
+
+An optional weekly message for each login, sent to Telegram or email. It is off by default: turn on **Weekly summary** under Optional features in Settings. With it off, nothing runs and nothing changes.
+
+Each message has one section per car that login can see and has ticked. For each car it says how many miles you are over or under pace as of the last reading, how many miles you can drive this week and stay on pace, where you end up against the limit, and a nudge to add a reading if the last one is a week old. Over pace is amber and under pace uses your accent color, never red and green. If none of the cars has a reading yet, that week is skipped.
+
+### Targets live in your .env, not in the app
+
+A target is a name plus a link. You set up to four in the environment variables (the compose file above already passes them through):
+
+```
+NOTIFY_1_NAME=Alex Telegram
+NOTIFY_1_LINK=tgram://BOTTOKEN/CHATID
+NOTIFY_2_NAME=Sam email
+NOTIFY_2_LINK=mailto://USER:PASSWORD@gmail.com/recipient@example.com
+```
+
+The links hold passwords and bot tokens, so they never go into the app's data file, the Settings page, the API, or a backup. Settings only shows each target's name, its type, and whether the link is valid. Leave unused pairs empty, and restart the container after you change them.
+
+In Settings, the admin picks which targets each login gets, plus the day, the time and which cars to include. A login does not have to do anything, and can only see and turn off its own summary. **Send test now** sends the real message to the picked targets and shows what happened, with errors that never repeat the link.
+
+### Link formats
+
+- **Telegram:** `tgram://BOTTOKEN/CHATID`. Create a bot with @BotFather, send it a message, and use your chat ID. You can add more chat IDs after the first, separated by `/`.
+- **Email:** `mailto://USER:PASSWORD@HOST/recipient@example.com`. The account in the link signs in and is who the email is **from**. The address after the host is who it goes **to**. Leave the recipient off to send to the account's own address. Separate several recipients with `/` or a comma.
+  - Gmail, Outlook (also Hotmail, Live and MSN), Yahoo and iCloud are known by their host, so no port or mode is needed. Gmail and iCloud need an app password, not the normal one.
+  - Other mail servers: add `?port=587&mode=starttls` (or `mode=ssl`, or `mode=none` for a server on your own network). Extra options: `from=` for a different sender address, `name=` for the sender's display name, `smtp=` to name the mail server when it differs from the host, and `verify=no` for a server with a self-signed certificate. Use `mailtos://` to refuse an unencrypted connection.
+  - Special characters in a password must be URL-encoded (for example `@` becomes `%40`).
+
+### When it sends
+
+The server checks once a minute, in the `TZ` time zone. A weekly message goes out at its day and time, or up to six hours after if the server was down. Later than that, that week is skipped rather than arriving at a strange hour.
 
 ## Planned change
 

@@ -165,6 +165,7 @@
     var o = (status && status.options) || {};
     var names = [
       ['multi', 'Multiple vehicles', 'Track more than one car. Adds a vehicle picker at the top, a Vehicles section in Settings, and per-car access for each login. Off by default. With it off, the app looks and works exactly as before.'],
+      ['summary', 'Weekly summary', 'A weekly message for each login, to Telegram or email, with miles over or under pace and what you can drive this week. The links live in your .env file, not here. Off by default.'],
       ['overage', 'Overage cost', 'Shows what the miles past the limit would cost at turn-in.'],
       ['whatif', 'Trip what-if', 'A small calculator for how a planned trip changes your projection.'],
       ['glance', 'Glance view', 'A card at the top with the miles you can drive today and this week, and a read-only /api/v1/glance for widgets and Home Assistant.'],
@@ -189,7 +190,7 @@
       el('div', { class: 'spacer' }),
       el('button', { class: 'btn', type: 'button', text: 'Save', onclick: function () {
         msg.className = 'err'; msg.textContent = '';
-        api('PUT', '/api/options', { overage: boxes.overage.checked, whatif: boxes.whatif.checked, glance: boxes.glance.checked, backup: boxes.backup.checked, multi: boxes.multi.checked, history: boxes.history.checked, overageRate: rate.value })
+        api('PUT', '/api/options', { overage: boxes.overage.checked, whatif: boxes.whatif.checked, glance: boxes.glance.checked, backup: boxes.backup.checked, multi: boxes.multi.checked, summary: boxes.summary.checked, history: boxes.history.checked, overageRate: rate.value })
           .then(function (st) { status = st; if (!st.options.multi) setCar(''); else if (st.vehicle_id) setCar(st.vehicle_id); msg.className = 'err ok'; msg.textContent = 'Saved.'; renderSettings(false); })
           .catch(function (x) { msg.textContent = x.message; });
       } }),
@@ -309,6 +310,7 @@
       kids.splice(1, 0, appearanceCard(), featuresCard());
       if (mode !== 'proxy') kids.splice(3, 0, usersCard());
       if (mode !== 'proxy') kids.splice(4, 0, passwordCard());
+      if (status && status.options && status.options.summary) kids.splice(3, 0, summaryCard());
       if (multi()) kids.unshift(vehiclesCard());
     }
     kids.unshift(el('p', {}, [first ? iconBtn('logout', 'Log out', logout, 'quiet') : iconBtn('back', 'Back', boot, 'quiet')]));
@@ -325,6 +327,7 @@
         el('p', { class: 'sub', text: 'You can add odometer readings. The admin manages the lease settings and logins.' })
       ]),
       appearanceCard(),
+      status && status.options && status.options.summary ? summaryCard() : null,
       passwordCard(),
       el('div', { class: 'card' }, [
         el('h2', { text: 'Your API keys' }),
@@ -436,6 +439,112 @@
       return ids.length === boxes.length ? { all: true } : { vehicles: ids };
     }
     return { node: el('div', { class: 'access' }, boxes.map(function (b) { return b.row; })), read: read };
+  }
+
+  var DAY_NAMES = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+  var DAY_LONG = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
+  function clock(t) {
+    var p = String(t || '08:00').split(':'), h = Number(p[0]), m = p[1];
+    return (h % 12 || 12) + ':' + m + (h < 12 ? ' AM' : ' PM');
+  }
+  function lastSend(last) {
+    if (!last) return 'Nothing sent yet.';
+    var when = new Date(last.at).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    if (last.result === 'skipped') return 'Last week: skipped (' + (last.note || 'no readings') + '), ' + when + '.';
+    return 'Last send: ' + when + ', ' + (last.result === 'sent' ? 'OK' : 'failed') + '.';
+  }
+
+  // Weekly summary. The admin sets it up for every login. A login can see its own and turn it off.
+  function summaryCard() {
+    var box = el('div', { class: 'card' }, [el('h2', { text: 'Weekly summary' }), el('p', { class: 'note', text: 'Loading...' })]);
+    api('GET', '/api/notify').then(function (r) {
+      box.textContent = '';
+      box.appendChild(el('h2', { text: 'Weekly summary' }));
+      if (me.role !== 'admin') {
+        var mine = r.users[0] && r.users[0].notify;
+        if (!mine || !mine.on) {
+          box.appendChild(el('p', { class: 'sub', text: 'Your weekly summary is off. The admin sets it up for you if you want one.' }));
+          return;
+        }
+        box.appendChild(el('p', { class: 'sub', text: 'Sent ' + DAY_LONG[mine.day] + ' at ' + clock(mine.time) + ' to ' + (mine.targets.join(', ') || 'no target') + '. ' + lastSend(mine.last) }));
+        var m1 = el('p', { class: 'err', role: 'status' });
+        box.appendChild(el('button', { class: 'btn quiet', type: 'button', text: 'Turn my weekly summary off', onclick: function () {
+          api('POST', '/api/notify/' + r.users[0].id + '/off').then(function () { box.replaceWith(summaryCard()); }).catch(function (x) { m1.textContent = x.message; });
+        } }));
+        box.appendChild(m1);
+        return;
+      }
+      box.appendChild(el('p', { class: 'sub', text: 'Targets come from your .env file, so only their names show here. Links are never shown, saved in the app, or sent to this page. Messages go out at the server time zone (' + r.timezone + ').' }));
+      if (!r.targets.length) {
+        box.appendChild(el('p', { class: 'note', text: 'No targets yet. In your .env file, set NOTIFY_1_NAME to a name and NOTIFY_1_LINK to a tgram:// or mailto:// link (up to ' + r.slots + ' pairs), then restart. The README has the format.' }));
+      }
+      r.targets.forEach(function (t) {
+        box.appendChild(el('div', { class: 'token-row' }, [
+          el('span', {}, [el('strong', { text: t.name }), el('br'), el('span', { class: 'note', text: t.ready ? (t.type === 'telegram' ? 'Telegram' : 'Email, from the account in the link to the address in it') : t.problem })]),
+          el('span', { class: 'tag' + (t.ready ? '' : ' warn'), text: t.ready ? 'Ready' : 'Link not valid' })
+        ]));
+      });
+      if (!r.users.length) box.appendChild(el('p', { class: 'note', text: 'Per-login settings need app logins (not proxy mode).' }));
+      r.users.forEach(function (u) { box.appendChild(userBlock(u, r)); });
+    }).catch(function (x) { box.appendChild(el('p', { class: 'err', text: x.message })); });
+    return box;
+  }
+
+  function userBlock(u, r) {
+    var n = u.notify;
+    var on = el('input', { type: 'checkbox' }); on.checked = n.on;
+    var tboxes = r.targets.filter(function (t) { return t.ready; }).map(function (t) {
+      var cb = el('input', { type: 'checkbox' }); cb.checked = n.targets.indexOf(t.name) >= 0;
+      return { name: t.name, cb: cb, row: el('label', { class: 'check tight' }, [cb, t.name]) };
+    });
+    var day = n.day;
+    var chips = DAY_NAMES.map(function (d, i) {
+      return el('button', { type: 'button', class: i === day ? 'on' : '', text: d, 'aria-label': DAY_LONG[i], onclick: function () {
+        day = i; chips.forEach(function (c, j) { c.className = j === i ? 'on' : ''; });
+      } });
+    });
+    var time = el('input', { type: 'time', value: n.time });
+    var carBoxes = null;
+    var cars = (status.vehicles || []);
+    if (multi() && cars.length > 1) {
+      var avail = u.cars === 'all' ? cars : cars.filter(function (v) { return u.cars.indexOf(v.id) >= 0; });
+      carBoxes = accessBoxes(n.cars === 'all' ? 'all' : n.cars);
+      carBoxes.node.querySelectorAll('input').forEach(function (cb, i) { if (avail.indexOf(cars[i]) < 0) { cb.checked = false; cb.disabled = true; } });
+    }
+    var msg = el('p', { class: 'err', role: 'status' });
+    function body() {
+      var b = { on: on.checked, day: day, time: time.value, targets: tboxes.filter(function (t) { return t.cb.checked; }).map(function (t) { return t.name; }) };
+      if (carBoxes) { var c = carBoxes.read(); if (c.all) b.all = true; else b.cars = c.vehicles; }
+      return b;
+    }
+    var head = el('h3', { class: 'minor', text: u.username + (u.role === 'admin' ? ' (admin)' : '') });
+    return el('div', { class: 'sumuser' }, [
+      el('div', { class: 'spacer' }), head,
+      el('label', { class: 'check tight' }, [on, 'Send a weekly summary to ' + u.username]),
+      el('p', { class: 'note', text: 'Send to' }),
+      tboxes.length ? el('div', { class: 'access' }, tboxes.map(function (t) { return t.row; })) : el('p', { class: 'note', text: 'No ready targets.' }),
+      el('p', { class: 'note', text: 'Day and time' }),
+      el('div', { class: 'seg' }, chips),
+      el('label', { class: 'field' }, ['Time', time]),
+      carBoxes ? el('p', { class: 'note', text: 'Vehicles in the message' }) : null, carBoxes ? carBoxes.node : null,
+      el('div', { class: 'spacer' }),
+      el('div', { class: 'row' }, [
+        el('button', { class: 'btn', type: 'button', text: 'Save', onclick: function () {
+          msg.className = 'err'; msg.textContent = '';
+          api('PUT', '/api/notify/' + u.id, body()).then(function () { msg.className = 'err ok'; msg.textContent = 'Saved.'; }).catch(function (x) { msg.textContent = x.message; });
+        } }), ' ',
+        el('button', { class: 'btn quiet', type: 'button', text: 'Send test now', onclick: function () {
+          msg.className = 'err'; msg.textContent = 'Saving and sending...';
+          api('PUT', '/api/notify/' + u.id, body()).then(function () { return api('POST', '/api/notify/' + u.id + '/test'); }).then(function (t) {
+            var bad = t.results.filter(function (x) { return !x.ok; });
+            msg.className = bad.length ? 'err' : 'err ok';
+            msg.textContent = t.results.map(function (x) { return (x.name ? x.name + ': ' : '') + (x.ok ? 'sent' : x.error); }).join(' ');
+          }).catch(function (x) { msg.className = 'err'; msg.textContent = x.message; });
+        } })
+      ]),
+      msg,
+      el('p', { class: 'note', text: lastSend(n.last) })
+    ]);
   }
 
   function usersCard() {

@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const Lease = require('./lib/lease.js');
+const Notify = require('./lib/notify.js');
 
 const PORT = Number(process.env.PORT) || 8000;
 const DATA_DIR = process.env.DATA_DIR || '/data';
@@ -302,7 +303,7 @@ function cleanAccess(b) {
 }
 
 // Optional features. All start OFF and the admin turns each one on in Settings.
-const FEATURES = ['overage', 'whatif', 'glance', 'backup', 'multi'];
+const FEATURES = ['overage', 'whatif', 'glance', 'backup', 'multi', 'summary'];
 function optionsBody() {
   const o = data.options || {};
   const out = {};
@@ -321,6 +322,86 @@ function cleanOptions(b) {
   else if (isFinite(Number(raw)) && Number(raw) >= 0 && Number(raw) <= 10) out.overageRate = Number(raw) > 0 ? Math.round(Number(raw) * 10000) / 10000 : null;
   else return null;
   return out;
+}
+
+
+// ---------- weekly summary ----------
+
+// Targets come from the environment. The links stay in memory here and are never sent to the browser or saved.
+const TARGETS = Notify.loadTargets(process.env);
+const TARGET_BASE = process.env.NOTIFY_TELEGRAM_API || undefined; // lets tests point Telegram at a local server
+function summaryOn() { return (data.options || {}).summary === true; }
+function cleanNotify(b, prev) {
+  const n = {
+    on: b.on === true,
+    day: Number.isInteger(b.day) && b.day >= 0 && b.day <= 6 ? b.day : 0,
+    time: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(b.time || '')) ? String(b.time) : '08:00',
+    cars: 'all',
+    targets: [],
+    lastSlot: prev && prev.lastSlot ? prev.lastSlot : null,
+    last: prev && prev.last ? prev.last : null
+  };
+  if (Array.isArray(b.cars) && b.all !== true) n.cars = b.cars.filter((id, i, a) => data.vehicles.some((v) => v.id === id) && a.indexOf(id) === i);
+  if (Array.isArray(b.targets)) b.targets.forEach((name) => {
+    const t = TARGETS.find((x) => x.name.toLowerCase() === String(name).toLowerCase());
+    if (t && n.targets.indexOf(t.name) < 0) n.targets.push(t.name);
+  });
+  return n;
+}
+function notifyView(u) {
+  const n = u.notify || {};
+  return { on: n.on === true, day: n.day === undefined ? 0 : n.day, time: n.time || '08:00', cars: Array.isArray(n.cars) ? n.cars : 'all', targets: Array.isArray(n.targets) ? n.targets : [], last: n.last || null };
+}
+function weekSection(car) {
+  const plan = Lease.makePlan(car.settings);
+  if (!plan) return null;
+  const idx = Lease.dayIndex(plan, todayKey());
+  if (idx < 0 || idx >= plan.dayCount) return null;
+  const ev = Lease.evaluate(plan, sortedReadings(car));
+  if (!ev) return null;
+  const ahead = plan.startOdometer + Lease.allowedThrough(plan, Math.min(idx + 7, plan.dayCount - 1));
+  const since = Math.round((Date.parse(todayKey() + 'T00:00:00Z') - Date.parse(ev.date + 'T00:00:00Z')) / 86400000);
+  return { name: (car.settings && car.settings.vehicle) || 'Vehicle', odometer: ev.odometer, date: ev.date, over: ev.diff, week: ahead - ev.odometer, projectedVsLimit: ev.projected === null ? null : ev.projected - plan.limit, daysSince: since };
+}
+// The message for one login: a section for each car they can see and ticked. Null when none has a reading.
+function summaryFor(user) {
+  const n = user.notify || {};
+  const cars = visibleCars(user).filter((c) => !Array.isArray(n.cars) || n.cars.indexOf(c.id) >= 0);
+  const sections = cars.map(weekSection).filter(Boolean);
+  if (!sections.length) return null;
+  const label = new Intl.DateTimeFormat('en-US', { timeZone: TZ, month: 'short', day: 'numeric' }).format(new Date());
+  return Notify.buildSummary(sections, user.username, label);
+}
+async function deliver(user, msg) {
+  const n = user.notify || {};
+  const picked = TARGETS.filter((t) => (n.targets || []).indexOf(t.name) >= 0);
+  if (!picked.length) return [{ name: '', ok: false, error: 'No target is picked for this login.' }];
+  const out = [];
+  for (const t of picked) {
+    try { await Notify.sendTo(t, msg, { base: TARGET_BASE }); out.push({ name: t.name, ok: true }); }
+    catch (e) { out.push({ name: t.name, ok: false, error: String((e && e.message) || 'Failed.').slice(0, 160) }); }
+  }
+  return out;
+}
+let ticking = false;
+async function summaryTick(now) {
+  if (ticking || !summaryOn()) return;
+  ticking = true;
+  try {
+    for (const user of data.users) {
+      const n = user.notify;
+      if (!n || n.on !== true) continue;
+      const slot = Notify.dueSlot(now || new Date(), TZ, n.day, n.time);
+      if (!slot || n.lastSlot === slot) continue;
+      n.lastSlot = slot;
+      saveData();
+      const msg = summaryFor(user);
+      if (!msg) { n.last = { at: new Date().toISOString(), result: 'skipped', note: 'No readings yet.' }; saveData(); continue; }
+      const results = await deliver(user, msg);
+      n.last = { at: new Date().toISOString(), result: results.every((r) => r.ok) ? 'sent' : 'failed', results: results };
+      saveData();
+    }
+  } finally { ticking = false; }
 }
 
 // Guards a spreadsheet cell from being read as a formula.
@@ -370,7 +451,7 @@ function parseCar(b, label) {
 // Returns { error } or { options, cars: [{ id, archived, settings, readings, history }], single }.
 function parseBackup(b) {
   if (!b || b.app !== 'odometer-pace') return { error: 'That is not an Odometer Pace backup file.' };
-  const options = cleanOptions(b.options || {}) || { overage: false, whatif: false, glance: false, backup: false, multi: false, overageRate: null, history: true };
+  const options = cleanOptions(b.options || {}) || { overage: false, whatif: false, glance: false, backup: false, multi: false, summary: false, overageRate: null, history: true };
   if (Array.isArray(b.vehicles)) {
     if (!b.vehicles.length || b.vehicles.length > MAX_CARS) return { error: 'That backup has no vehicles, or too many.' };
     const cars = [];
@@ -815,6 +896,40 @@ async function handleApi(req, res, url) {
     return sendJson(res, 404, { error: 'Not found.' });
   }
 
+  // Weekly summary: who gets what. Targets are names only.
+  if (p === '/api/notify' && method === 'GET') {
+    const mineOnly = !isAdmin;
+    const users = data.users.filter((u) => !mineOnly || u.id === me.id).map((u) => ({ id: u.id, username: u.username, role: u.role, notify: notifyView(u), cars: u.role === 'admin' || !Array.isArray(u.access) ? 'all' : u.access }));
+    return sendJson(res, 200, { enabled: summaryOn(), timezone: TZ, targets: isAdmin ? TARGETS.map(Notify.publicTarget) : [], users: users, slots: Notify.SLOTS });
+  }
+  const nm = /^\/api\/notify\/([a-f0-9]+)(\/off|\/test)?$/.exec(p);
+  if (nm) {
+    const target = data.users.find((u) => u.id === nm[1]);
+    if (!target) return sendJson(res, 404, { error: 'No such user.' });
+    if (nm[2] === '/off' && method === 'POST') {
+      if (!isAdmin && target.id !== me.id) return adminOnly();
+      target.notify = Object.assign({}, target.notify || cleanNotify({}), { on: false });
+      saveData();
+      return sendJson(res, 200, { ok: true });
+    }
+    if (!isAdmin) return adminOnly();
+    if (!summaryOn()) return sendJson(res, 404, { error: 'Weekly summary is turned off in Settings.' });
+    if (nm[2] === '/test' && method === 'POST') {
+      const msg = summaryFor(target);
+      if (!msg) return sendJson(res, 400, { error: 'There is nothing to send yet. None of the picked cars has a reading.' });
+      const results = await deliver(target, msg);
+      return sendJson(res, 200, { results: results });
+    }
+    if (!nm[2] && method === 'PUT') {
+      let b;
+      try { b = await readBody(req); } catch (e) { return sendJson(res, 400, { error: 'Bad request.' }); }
+      target.notify = cleanNotify(b, target.notify);
+      saveData();
+      return sendJson(res, 200, { ok: true, notify: notifyView(target) });
+    }
+    return sendJson(res, 404, { error: 'Not found.' });
+  }
+
   if (p === '/api/tokens') {
     if (method === 'GET') {
       // Everyone sees their own keys. The admin sees all of them.
@@ -896,6 +1011,9 @@ const server = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) {
+  setInterval(() => { summaryTick().catch((e) => console.error('summary', e && e.message)); }, 60 * 1000).unref();
   server.listen(PORT, () => console.log('Odometer Pace listening on ' + PORT + ' (auth: ' + AUTH_MODE + ', data: ' + DATA_FILE + ')'));
 }
+server.summaryTick = summaryTick;
+server.appData = data;
 module.exports = server;

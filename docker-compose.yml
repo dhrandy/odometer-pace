@@ -13,6 +13,14 @@ services:
       AUTH_MODE: ${AUTH_MODE}
       COOKIE_SECURE: ${COOKIE_SECURE}
       TRUST_PROXY: ${TRUST_PROXY}
+      NOTIFY_1_NAME: ${NOTIFY_1_NAME}
+      NOTIFY_1_LINK: ${NOTIFY_1_LINK}
+      NOTIFY_2_NAME: ${NOTIFY_2_NAME}
+      NOTIFY_2_LINK: ${NOTIFY_2_LINK}
+      NOTIFY_3_NAME: ${NOTIFY_3_NAME}
+      NOTIFY_3_LINK: ${NOTIFY_3_LINK}
+      NOTIFY_4_NAME: ${NOTIFY_4_NAME}
+      NOTIFY_4_LINK: ${NOTIFY_4_LINK}
     volumes:
       - ${DATA_PATH}:/data
     read_only: true
