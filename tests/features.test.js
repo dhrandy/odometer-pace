@@ -211,3 +211,14 @@ test('the same value for the same date changes nothing and adds no history', asy
   assert.strictEqual(r.json.replaced, true);
   assert.strictEqual(r.json.unchanged, false);
 });
+
+test('the icons are the road mark and the manifest and page point at real files', async () => {
+  const m = (await call('GET', '/manifest.webmanifest')).json;
+  for (const i of m.icons) assert.strictEqual((await fetch(BASE + i.src)).status, 200, i.src);
+  const html = await (await fetch(BASE + '/')).text();
+  assert.ok(html.includes('/icon-180.png'));
+  const svg = await (await fetch(BASE + '/icon.svg')).text();
+  assert.ok(svg.includes('M17 40L21.5 8') && !svg.includes('#6d28d9'));
+  const png = await fetch(BASE + '/icon-512.png');
+  assert.strictEqual(png.headers.get('content-type'), 'image/png');
+});
