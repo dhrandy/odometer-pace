@@ -1,4 +1,4 @@
-// Lease Miles server. One file, no dependencies. Serves the page and a small JSON API.
+// Odometer Pace server. One file, no dependencies. Serves the page and a small JSON API.
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -13,7 +13,7 @@ const TRUST_PROXY = process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY =
 const TZ = process.env.TZ || 'UTC';
 const SESSION_DAYS = 90;
 const PUBLIC_DIR = path.join(__dirname, 'public');
-const DATA_FILE = path.join(DATA_DIR, 'lease-miles.json');
+const DATA_FILE = path.join(DATA_DIR, 'odometer-pace.json');
 
 // ---------- storage ----------
 
@@ -114,7 +114,7 @@ function readBody(req) {
 
 function isLoggedIn(req) {
   if (AUTH_MODE === 'proxy') return true;
-  const id = readCookie(req, 'lm_session');
+  const id = readCookie(req, 'op_session');
   if (!id) return false;
   const hash = sha256(id);
   const now = Date.now();
@@ -127,13 +127,13 @@ function startSession(res) {
   data.sessions = data.sessions.filter((s) => s.expires > now);
   data.sessions.push({ hash: sha256(id), expires: now + SESSION_DAYS * 86400000 });
   saveData();
-  const cookie = ['lm_session=' + id, 'Path=/', 'HttpOnly', 'SameSite=Strict', 'Max-Age=' + SESSION_DAYS * 86400];
+  const cookie = ['op_session=' + id, 'Path=/', 'HttpOnly', 'SameSite=Strict', 'Max-Age=' + SESSION_DAYS * 86400];
   if (COOKIE_SECURE) cookie.push('Secure');
   return cookie.join('; ');
 }
 
 function endSession(req) {
-  const id = readCookie(req, 'lm_session');
+  const id = readCookie(req, 'op_session');
   if (id) {
     data.sessions = data.sessions.filter((s) => s.hash !== sha256(id));
     saveData();
@@ -143,7 +143,7 @@ function endSession(req) {
 // ---------- agent tokens ----------
 
 function tokenFromRequest(req) {
-  const m = /^Bearer\s+(lm_[A-Za-z0-9_-]+)$/.exec(String(req.headers.authorization || ''));
+  const m = /^Bearer\s+(op_[A-Za-z0-9_-]+)$/.exec(String(req.headers.authorization || ''));
   if (!m) return null;
   const hash = sha256(m[1]);
   const found = data.tokens.find((t) => safeEqual(t.hash, hash));
@@ -205,7 +205,7 @@ function statusBody() {
   return body;
 }
 
-const ACCENTS = ['purple', 'blue', 'cyan', 'pink', 'orange'];
+const ACCENTS = ['purple', 'blue', 'cyan', 'green', 'pink', 'orange'];
 
 function uiBody() {
   const ui = data.ui || {};
@@ -295,7 +295,7 @@ async function handleApi(req, res, url) {
 
   if (p === '/api/logout' && method === 'POST') {
     endSession(req);
-    return sendJson(res, 200, { ok: true }, { 'Set-Cookie': 'lm_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0' });
+    return sendJson(res, 200, { ok: true }, { 'Set-Cookie': 'op_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0' });
   }
 
   if (!isLoggedIn(req)) return sendJson(res, 401, { error: 'Log in first.' });
@@ -355,7 +355,7 @@ async function handleApi(req, res, url) {
       try { b = await readBody(req); } catch (e) { return sendJson(res, 400, { error: 'Bad request.' }); }
       const name = String(b.name || '').trim().slice(0, 40);
       if (!name) return sendJson(res, 400, { error: 'Give the key a name.' });
-      const key = 'lm_' + crypto.randomBytes(32).toString('base64url');
+      const key = 'op_' + crypto.randomBytes(32).toString('base64url');
       data.tokens.push({ id: crypto.randomBytes(6).toString('hex'), name: name, hash: sha256(key), created: new Date().toISOString() });
       saveData();
       // The key is shown this once and only its hash is kept.
@@ -431,6 +431,6 @@ function dropRoot() {
 
 if (require.main === module) {
   dropRoot();
-  server.listen(PORT, () => console.log('Lease Miles listening on ' + PORT + ' (auth: ' + AUTH_MODE + ', data: ' + DATA_FILE + ')'));
+  server.listen(PORT, () => console.log('Odometer Pace listening on ' + PORT + ' (auth: ' + AUTH_MODE + ', data: ' + DATA_FILE + ')'));
 }
 module.exports = server;

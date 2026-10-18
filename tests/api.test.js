@@ -69,8 +69,8 @@ test('api key: shown once, can read and write readings only', async () => {
   const made = await call('POST', '/api/tokens', { name: 'Test agent' });
   assert.strictEqual(made.status, 200);
   apiKey = made.json.key;
-  assert.ok(apiKey.startsWith('lm_'));
-  assert.ok(!fs.readFileSync(path.join(dir, 'lease-miles.json'), 'utf8').includes(apiKey), 'key must be stored hashed');
+  assert.ok(apiKey.startsWith('op_'));
+  assert.ok(!fs.readFileSync(path.join(dir, 'odometer-pace.json'), 'utf8').includes(apiKey), 'key must be stored hashed');
   assert.ok(!JSON.stringify((await call('GET', '/api/tokens')).json).includes(apiKey));
 
   const st = await agent('GET', '/api/v1/status');
@@ -88,7 +88,7 @@ test('api key: shown once, can read and write readings only', async () => {
     const r = await fetch(BASE + url, { headers: { Authorization: 'Bearer ' + apiKey } });
     assert.strictEqual(r.status, 401, url);
   }
-  assert.strictEqual((await agent('GET', '/api/v1/status', undefined, 'lm_wrong')).status, 401);
+  assert.strictEqual((await agent('GET', '/api/v1/status', undefined, 'op_wrong')).status, 401);
 });
 
 test('a session cookie does not work on the agent api', async () => {
@@ -131,10 +131,11 @@ test('readings survive a restart', async () => {
 test('theme choice is saved on the server and validated', async () => {
   assert.strictEqual((await call('GET', '/api/status')).json.ui.accent, 'purple');
   assert.strictEqual((await call('PUT', '/api/ui', { accent: 'red' })).status, 400);
+  assert.strictEqual((await call('PUT', '/api/ui', { accent: 'green' })).status, 200);
   assert.strictEqual((await call('PUT', '/api/ui', { accent: 'blue', oled: true })).status, 200);
   const ui = (await call('GET', '/api/status')).json.ui;
   assert.strictEqual(ui.accent, 'blue');
   assert.strictEqual(ui.oled, true);
   // The agent API never carries theme data.
-  assert.strictEqual(JSON.stringify((await agent('GET', '/api/v1/status', undefined, 'lm_x')).json).includes('oled'), false);
+  assert.strictEqual(JSON.stringify((await agent('GET', '/api/v1/status', undefined, 'op_x')).json).includes('oled'), false);
 });

@@ -1,6 +1,6 @@
 {
-  "name": "Lease Miles",
-  "short_name": "Lease Miles",
+  "name": "Odometer Pace",
+  "short_name": "Odometer Pace",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f5f3f7",

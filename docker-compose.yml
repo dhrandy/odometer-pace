@@ -1,9 +1,9 @@
-# Lease Miles. Copy this whole file into your stack.
+# Odometer Pace. Copy this whole file into your stack.
 # Fill in the variables in Dockhand's Environment tab (or a .env file next to this file).
 services:
-  lease-miles:
-    container_name: lease-miles
-    build: https://github.com/dhrandy/lease-miles.git#main
+  odometer-pace:
+    container_name: odometer-pace
+    build: https://github.com/dhrandy/odometer-pace.git#main
     restart: unless-stopped
     ports:
       - "${PORT}:${PORT}"

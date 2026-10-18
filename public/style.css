@@ -142,9 +142,10 @@ code { background: var(--raised); padding: 1px 5px; border-radius: 4px; }
 pre code { padding: 0; background: none; }
 .hero { background: linear-gradient(135deg, var(--hero-a) 0%, var(--hero-b) 100%); }
 
-/* Accent colors. Purple is the default set in :root. No red or green. */
+/* Accent colors. Purple is the default set in :root. Over pace stays amber on every accent. */
 html[data-accent="blue"] { --accent: #60a5fa; --accent-strong: #2563eb; --accent-strong-hover: #1d4ed8; --accent-soft: #1b2745; --accent-mid: #93c5fd; --accent-rgb: 147,197,253; --hero-a: #172554; --hero-b: #1e3a8a; --accent-past: #121a2e; }
 html[data-accent="cyan"] { --accent: #22d3ee; --accent-strong: #0e7490; --accent-strong-hover: #155e75; --accent-soft: #14303a; --accent-mid: #67e8f9; --accent-rgb: 103,232,249; --hero-a: #083344; --hero-b: #155e75; --accent-past: #0f1d24; }
+html[data-accent="green"] { --accent: #4ade80; --accent-strong: #15803d; --accent-strong-hover: #166534; --accent-soft: #15301f; --accent-mid: #86efac; --accent-rgb: 134,239,172; --hero-a: #052e16; --hero-b: #14532d; --accent-past: #101e16; }
 html[data-accent="pink"] { --accent: #f472b6; --accent-strong: #be185d; --accent-strong-hover: #9d174d; --accent-soft: #3a1b30; --accent-mid: #f9a8d4; --accent-rgb: 249,168,212; --hero-a: #500724; --hero-b: #831843; --accent-past: #261320; }
 html[data-accent="orange"] { --accent: #fb923c; --accent-strong: #c2410c; --accent-strong-hover: #9a3412; --accent-soft: #3a2616; --accent-mid: #fdba74; --accent-rgb: 253,186,116; --hero-a: #431407; --hero-b: #7c2d12; --accent-past: #251a12; }
 
@@ -159,6 +160,7 @@ html[data-oled="true"] .day.today { background: var(--accent-strong); }
 .swatch { width: 48px; height: 48px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; padding: 0; }
 .swatch[aria-pressed="true"] { border-color: #fff; }
 .swatch.s-purple { background: #8b5cf6; } .swatch.s-blue { background: #60a5fa; } .swatch.s-cyan { background: #22d3ee; }
+.swatch.s-green { background: #4ade80; }
 .swatch.s-pink { background: #f472b6; } .swatch.s-orange { background: #fb923c; }
 .check { display: flex; align-items: center; gap: 12px; font-size: 1rem; cursor: pointer; }
 .check input { width: 24px; height: 24px; accent-color: var(--accent-strong); }

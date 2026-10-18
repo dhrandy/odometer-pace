@@ -1,4 +1,4 @@
-# Lease Miles
+# Odometer Pace
 
 A small self-hosted page that tracks a car lease's mileage. It shows every day of the lease as a calendar, crosses off the days that have passed, and compares your odometer with where it should be. Readings are saved on your server, so your phone and your computer always match.
 
@@ -8,7 +8,7 @@ A small self-hosted page that tracks a car lease's mileage. It shows every day o
 - Odometer log: over or under pace, miles remaining, miles per day, projected odometer at lease end
 - Chart of your readings against the allowed line
 - One container, one small JSON file in a volume, no database server
-- Dark theme with five accent colors (purple by default) and an OLED black option, set in Settings, works on phones
+- Dark theme with six accent colors (purple by default) and an OLED black option, set in Settings, works on phones
 - API keys so an AI or script can add readings and read your status
 - Your lease details are typed in the app on first run. Nothing about your lease is in the code.
 
@@ -29,7 +29,7 @@ A small self-hosted page that tracks a car lease's mileage. It shows every day o
 | `AUTH_MODE` | `app` for the built-in login, `proxy` if your reverse proxy handles login | `app` |
 | `COOKIE_SECURE` | `true` when you reach it over https, `false` on plain http | `true` |
 | `TRUST_PROXY` | `1` when it sits behind a reverse proxy, otherwise `0` | `1` |
-| `DATA_PATH` | Folder on your server where readings are stored | `/DATA/AppData/lease-miles` |
+| `DATA_PATH` | Folder on your server where readings are stored | `/DATA/AppData/odometer-pace` |
 
 A filled-out example is in `.env.example`.
 
@@ -37,9 +37,9 @@ A filled-out example is in `.env.example`.
 
 ```yaml
 services:
-  lease-miles:
-    container_name: lease-miles
-    build: https://github.com/dhrandy/lease-miles.git#main
+  odometer-pace:
+    container_name: odometer-pace
+    build: https://github.com/dhrandy/odometer-pace.git#main
     restart: unless-stopped
     ports:
       - "${PORT}:${PORT}"

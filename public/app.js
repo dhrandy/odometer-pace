@@ -1,11 +1,11 @@
-// Lease Miles front end. Plain JavaScript, no build step.
+// Odometer Pace front end. Plain JavaScript, no build step.
 (function () {
   var app = document.getElementById('app');
   var status = null;
   var ui = { accent: 'purple', oled: false };
 
   // Remember the theme on this device so the login page matches before the server answers.
-  try { ui = Object.assign(ui, JSON.parse(localStorage.getItem('lm_ui') || '{}')); } catch (e) { /* keep defaults */ }
+  try { ui = Object.assign(ui, JSON.parse(localStorage.getItem('op_ui') || '{}')); } catch (e) { /* keep defaults */ }
   applyUi(ui);
 
   function applyUi(next) {
@@ -14,7 +14,7 @@
     document.documentElement.setAttribute('data-oled', String(ui.oled));
     var meta = document.querySelector('meta[name=theme-color]');
     if (meta) meta.setAttribute('content', ui.oled ? '#000000' : getComputedStyle(document.documentElement).getPropertyValue('--hero-b').trim());
-    try { localStorage.setItem('lm_ui', JSON.stringify(ui)); } catch (e) { /* private mode */ }
+    try { localStorage.setItem('op_ui', JSON.stringify(ui)); } catch (e) { /* private mode */ }
   }
 
   function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
@@ -81,7 +81,7 @@
         .catch(function (x) { err.textContent = x.message; });
     }
     show(el('div', { class: 'center' }, [el('div', { class: 'card' }, [
-      el('h1', { text: 'Lease Miles' }),
+      el('h1', { text: 'Odometer Pace' }),
       el('p', { class: 'sub', text: first ? 'First run. Choose a password (8 or more characters).' : 'Log in to see your mileage.' }),
       el('form', { onsubmit: submit }, [
         el('label', { class: 'field' }, [pw]),
@@ -161,7 +161,7 @@
       el('p', { class: 'sub', text: 'Pick an accent color. These are saved on the server, so every device matches.' })
     ]);
     var swatches = el('div', { class: 'swatches', role: 'group', 'aria-label': 'Accent color' });
-    var names = { purple: 'Purple', blue: 'Blue', cyan: 'Cyan', pink: 'Pink', orange: 'Orange' };
+    var names = { purple: 'Purple', blue: 'Blue', cyan: 'Cyan', green: 'Green', pink: 'Pink', orange: 'Orange' };
     var oled = el('input', { type: 'checkbox' });
     oled.checked = ui.oled;
 
@@ -232,7 +232,7 @@
 
     var hero = el('header', { class: 'hero' }, [el('div', { class: 'hero-inner' }, [
       el('div', { class: 'topbar' }, [
-        el('span', { class: 'brand', text: 'Lease Miles' }),
+        el('span', { class: 'brand', text: 'Odometer Pace' }),
         el('nav', {}, [
           el('button', { class: 'link-btn', type: 'button', text: 'Settings', onclick: function () { renderSettings(false); } }),
           el('button', { class: 'link-btn', type: 'button', text: 'Log out', onclick: logout })
