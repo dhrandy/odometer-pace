@@ -105,6 +105,8 @@ With `AUTH_MODE=proxy` there are no logins in the app. Everyone who gets through
 
 Everyone with a login (admin or user) can open Settings, then API keys, give a key a name and create it. The key is shown once, so copy it then. Only a hash is stored. A key belongs to the person who made it, and the admin can see and revoke all keys.
 
+**Hand the key to your AI securely.** Give it through a vault, a secrets manager or an environment variable, never by pasting it into a chat or a prompt. Anything typed into a chat can be stored in its history. If a key ends up somewhere it should not be, revoke it in Settings and make a new one.
+
 A key can add odometer readings and read the status and readings. It cannot see settings, logins, or other keys. The full docs, with examples, are at `/api/docs` after you log in.
 
 ```
