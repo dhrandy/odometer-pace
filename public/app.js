@@ -49,6 +49,8 @@
     today: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3"/><path d="M12 19v3"/><path d="M2 12h3"/><path d="M19 12h3"/>',
     key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9"/><path d="M16 7l3 3"/>',
     userx: '<circle cx="9" cy="8" r="4"/><path d="M2 21v-1a6 6 0 0 1 6-6h2"/><path d="M16 16l5 5"/><path d="M21 16l-5 5"/>',
+    plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
+    close: '<path d="M18 6L6 18"/><path d="M6 6l12 12"/>',
     ban: '<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>'
   };
 
@@ -447,14 +449,34 @@
         .catch(function (x) { err.textContent = x.message; });
     }
 
+    // The entry form stays folded away until the plus button is tapped. With no readings yet it starts open.
+    var form = el('form', { class: 'form-row add-form', id: 'add-form', onsubmit: save }, [
+      el('label', { class: 'field' }, ['Odometer', odo]),
+      el('label', { class: 'field' }, ['Date', date]),
+      el('button', { class: 'btn', type: 'submit', text: 'Save reading' })
+    ]);
+    var intro = el('p', { class: 'sub', text: 'Enter a reading whenever you like. It is saved on the server, so your phone and computer match.' });
+    var open = !s.latest;
+    var toggle = el('button', { class: 'icon-btn add-btn', type: 'button', 'aria-controls': 'add-form', onclick: function () { setOpen(!open, true); } });
+    function setOpen(next, focus) {
+      open = next;
+      form.hidden = !open;
+      intro.hidden = !open;
+      err.hidden = !open;
+      var label = open ? 'Close' : 'Add reading';
+      toggle.textContent = '';
+      toggle.appendChild(icon(open ? 'close' : 'plus'));
+      toggle.setAttribute('aria-label', label);
+      toggle.setAttribute('title', label);
+      toggle.setAttribute('aria-expanded', String(open));
+      if (open && focus) odo.focus();
+    }
+    setOpen(open, false);
+
     var card = el('div', { class: 'card' }, [
-      el('h2', { text: 'Your odometer' }),
-      el('p', { class: 'sub', text: 'Enter a reading whenever you like. It is saved on the server, so your phone and computer match.' }),
-      el('form', { class: 'form-row', onsubmit: save }, [
-        el('label', { class: 'field' }, ['Odometer', odo]),
-        el('label', { class: 'field' }, ['Date', date]),
-        el('button', { class: 'btn', type: 'submit', text: 'Save reading' })
-      ]),
+      el('div', { class: 'card-head' }, [el('h2', { text: 'Your odometer' }), toggle]),
+      intro,
+      form,
       err
     ]);
 

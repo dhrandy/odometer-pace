@@ -278,3 +278,9 @@ test('every icon button has a label and a tap target of at least 44px', async ()
   const css = await (await fetch(BASE + '/style.css')).text();
   assert.match(css, /\.icon-btn \{[^}]*min-width: 44px; min-height: 44px/);
 });
+
+test('the entry form is behind an Add reading button', async () => {
+  const js = await (await fetch(BASE + '/app.js')).text();
+  assert.ok(js.includes("'Add reading'") && js.includes("'aria-expanded'"));
+  assert.ok(js.includes('odo.focus()'));
+});

@@ -205,3 +205,9 @@ html[data-oled="true"] .day.past { background: #08080a; }
 .log .icon-btn { background: none; color: var(--muted); }
 .log .icon-btn:hover { background: var(--line); color: var(--err); }
 .row-btns .icon-btn { width: 44px; padding: 0; }
+
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.card-head h2 { margin: 0; }
+.add-btn { background: var(--accent-strong); color: #fff; }
+.add-btn:hover { background: var(--accent-strong-hover); }
+[hidden] { display: none !important; }
