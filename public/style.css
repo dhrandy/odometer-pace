@@ -332,3 +332,34 @@ html[data-oled="true"] .month.big .day.today { background: var(--accent-strong);
 
 .tag.warn { border-color: var(--over); color: var(--over); }
 .sumuser .seg button { padding: 0; min-width: 0; }
+
+/* weekly summary, condensed */
+.tgt-line { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 6px; }
+.tgt { display: inline-flex; align-items: baseline; gap: 8px; background: var(--raised); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font-size: .92rem; }
+.tgt .note { margin: 0; font-size: .8rem; } .tgt .note:empty { display: none; }
+.tgt.bad { border-color: var(--over); }
+.sumuser { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; }
+.sumuser.collapse { padding-top: 0; }
+.sum-form { display: flex; flex-direction: column; gap: 10px; }
+.sum-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; min-height: 56px; background: none; border: 0; color: var(--ink); text-align: left; padding: 8px 0; cursor: pointer; font-size: 1rem; }
+.sum-head .note { margin: 0; }
+.sum-head svg, .sum-link svg { flex: none; transition: transform .15s; }
+.sum-head.open svg { transform: rotate(180deg); }
+.sumuser.collapse .sum-form { padding-bottom: 8px; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill { display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 999px; background: var(--raised); border: 1px solid var(--line); cursor: pointer; font-weight: 600; }
+.pill input { position: absolute; opacity: 0; pointer-events: none; }
+.pill:has(input:checked) { background: var(--accent-strong); border-color: var(--accent-strong); color: #fff; }
+.pill:has(input:focus-visible) { outline: 3px solid var(--accent-mid); outline-offset: 1px; }
+.when { display: flex; gap: 10px; }
+.when .field { flex: 1 1 0; min-width: 0; }
+.sum-link { display: flex; justify-content: space-between; align-items: center; width: 100%; background: none; border: 0; color: var(--ink); text-align: left; padding: 0; min-height: 44px; cursor: pointer; font-size: 1rem; }
+.sum-link .note { margin: 0; }
+.sum-form .err:empty { display: none; }
+.sum-form .err { margin: 0; }
+.sum-form .note { margin: 0; }
+.sum-form .row { display: flex; gap: 10px; }
+.sum-form .row .btn { flex: 1 1 0; width: auto; margin: 0; }
+.sumuser { margin-top: 8px; padding-top: 8px; }
+.sumuser h3.minor { margin-bottom: 8px; }
+.top-actions { display: flex; justify-content: space-between; align-items: center; }

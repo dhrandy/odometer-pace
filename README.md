@@ -286,7 +286,7 @@ NOTIFY_2_LINK=mailto://USER:PASSWORD@gmail.com/recipient@example.com
 
 The links hold passwords and bot tokens, so they never go into the app's data file, the Settings page, the API, or a backup. Settings only shows each target's name, its type, and whether the link is valid. Leave unused pairs empty, and restart the container after you change them.
 
-In Settings, the admin picks which targets each login gets, plus the day, the time and which cars to include. A login does not have to do anything, and can only see and turn off its own summary. **Send test now** sends the real message to the picked targets and shows what happened, with errors that never repeat the link.
+The admin opens the bell at the top of Settings to pick which targets each login gets, plus the day, the time and which cars to include. Each login is one row that opens to edit. A login does not have to do anything, and can only see and turn off its own summary. **Test for (name)** sends the real message to the picked targets and shows what happened, with errors that never repeat the link.
 
 ### Link formats
 
